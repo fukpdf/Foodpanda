@@ -1,45 +1,128 @@
-# [Project name]
+# DeliveryOS
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Enterprise-grade food delivery ecosystem — a scalable, modular monorepo supporting Customer, Vendor, Rider, and Admin apps with a microservices-ready backend.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+### Start individual apps
+- `pnpm run dev:customer` — Customer PWA (port 3001)
+- `pnpm run dev:vendor` — Vendor PWA (port 3002)
+- `pnpm run dev:rider` — Rider PWA (port 3003)
+- `pnpm run dev:admin` — Admin Panel (port 3004)
+- `pnpm run dev:api-gateway` — API Gateway (port 3000)
+- `pnpm run dev:auth` — Auth Service (port 3010)
+
+### Start everything
+- `pnpm run dev` — Start all apps and services in parallel (via Turborepo)
+- `pnpm run dev:apps` — Start all Next.js apps only
+- `pnpm run dev:services` — Start all Fastify services only
+
+### Build & quality
+- `pnpm run build` — Build all packages, services, and apps
+- `pnpm run typecheck` — Typecheck all workspaces
+- `pnpm run lint` — Lint all workspaces
+- `pnpm run format` — Format all files with Prettier
+- `pnpm run clean` — Remove all build artifacts
+
+### Infrastructure
+- `docker compose -f infrastructure/docker/docker-compose.yml up -d` — Start Postgres, Redis, RabbitMQ
+- `sh tools/scripts/setup.sh` — First-time dev environment setup
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Monorepo**: pnpm workspaces + Turborepo
+- **Frontend apps**: Next.js 15, TypeScript, Tailwind CSS v4, App Router, PWA-ready
+- **Backend services**: Fastify 5, TypeScript, Node.js 24
+- **Shared packages**: ui-system, shared-types, shared-utils, security-core
+- **Code quality**: ESLint 9 (flat config), Prettier, Husky, lint-staged
+- **Infrastructure**: Docker Compose, Kubernetes manifests, Cloudflare Workers
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+```
+/apps
+  /customer-pwa    → Customer ordering app  (@deliveryos/customer-pwa, port 3001)
+  /vendor-pwa      → Restaurant dashboard   (@deliveryos/vendor-pwa, port 3002)
+  /rider-pwa       → Rider delivery app     (@deliveryos/rider-pwa, port 3003)
+  /admin-panel     → Ops admin panel        (@deliveryos/admin-panel, port 3004)
+
+/services
+  /api-gateway     → Single entry point     (@deliveryos/api-gateway, port 3000)
+  /auth-service    → JWT auth & sessions    (@deliveryos/auth-service, port 3010)
+
+/packages
+  /ui-system       → Shared React components (Button, Input, Card, Badge, Text, Spinner)
+  /shared-types    → All TypeScript interfaces (User, Order, Vendor, Auth, API types)
+  /shared-utils    → Constants, validators, formatters, helpers
+  /security-core   → Token, encryption, and signing interfaces
+
+/infrastructure
+  /docker          → docker-compose.yml + Dockerfiles
+  /kubernetes      → K8s manifests (namespace, deployments, HPA, PDB)
+  /cloudflare      → Wrangler config + edge Worker (rate limiting, CORS, headers)
+
+/tools/scripts     → setup.sh, clean.sh, build-all.sh
+
+turbo.json         → Turborepo task pipeline (build, dev, typecheck, lint, clean)
+eslint.config.js   → ESLint 9 flat config (TS, React, import rules)
+.prettierrc        → Prettier config with import ordering
+.lintstagedrc.js   → lint-staged: ESLint + Prettier on staged files
+.husky/pre-commit  → Runs lint-staged before every commit
+tsconfig.nextjs.json → Shared base tsconfig for Next.js apps
+tsconfig.node.json   → Shared base tsconfig for Node.js services
+```
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Turborepo over Nx**: Simpler config, superior caching, native pnpm integration
+- **App Router (Next.js 15)**: Server Components by default, co-located routes, streaming
+- **Fastify over Express**: 2× faster, schema validation built-in, TypeScript-first
+- **Shared types via workspace packages**: Single source of truth, no type drift between frontend/backend
+- **`@deliveryos/*` namespace**: Avoids collision with `@workspace/*` legacy packages; signals ecosystem ownership
+- **Route groups `(auth)`, `(main)`, `(dashboard)`**: Zero-cost URL nesting, shared layouts per group
+- **Tailwind v4 `@theme` blocks**: Design tokens per app (each app has its own brand color)
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **Customer PWA**: Browse vendors, place orders, track deliveries in real-time
+- **Vendor PWA**: Accept/reject orders, manage menus, monitor store status and analytics
+- **Rider PWA**: Go online, accept dispatch jobs, navigate to pickups/dropoffs
+- **Admin Panel**: Platform operations — vendor approval, rider management, refunds, analytics
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Architecture-first, no premature features
+- Production-grade from day one, no TODOs or placeholder hacks
+- Modular, independently deployable services
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Always run `pnpm run build:packages` before running apps if shared packages changed
+- Tailwind v4 uses `@import "tailwindcss"` (not `@tailwind base/components/utilities`)
+- Next.js apps use `postcss.config.mjs` with `@tailwindcss/postcss` (not `tailwindcss` plugin directly)
+- Services use `"type": "module"` and NodeNext module resolution
+- Each app has its own brand color palette defined in `globals.css` via `@theme {}`
+- The `pnpm-workspace.yaml` `minimumReleaseAge: 1440` may block same-day package installs
 
-## Pointers
+## Future microservices (ports 3011–3020)
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+| Service | Port | Purpose |
+|---|---|---|
+| user-service | 3011 | Profile & address management |
+| vendor-service | 3012 | Vendor registration & settings |
+| menu-service | 3013 | Menu CRUD & availability |
+| order-service | 3014 | Order lifecycle management |
+| dispatch-service | 3015 | Rider matching & routing |
+| wallet-service | 3016 | In-app wallet & credits |
+| payment-service | 3017 | Stripe/payment gateway integration |
+| notification-service | 3018 | Push/SMS/email notifications |
+| realtime-service | 3019 | WebSocket / SSE for live tracking |
+| analytics-service | 3020 | Metrics, reporting, BI |
+
+## Recommended next phases
+
+- **Phase 2**: Database layer — Drizzle ORM schemas per service, migrations
+- **Phase 3**: Auth implementation — bcrypt, JWT signing, Redis session store
+- **Phase 4**: Order flow — full CRUD for orders with state machine
+- **Phase 5**: Realtime — WebSocket server for live order tracking
+- **Phase 6**: Payments — Stripe integration in payment-service

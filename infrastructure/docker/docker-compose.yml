@@ -1,0 +1,119 @@
+version: "3.9"
+
+networks:
+  deliveryos:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: deliveryos_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-deliveryos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deliveryos_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-deliveryos}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deliveryos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - deliveryos
+
+  redis:
+    image: redis:7-alpine
+    container_name: deliveryos_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secret} --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - deliveryos
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: deliveryos_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-deliveryos}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq_secret}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - deliveryos
+
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api-gateway.Dockerfile
+    container_name: deliveryos_api_gateway
+    restart: unless-stopped
+    env_file:
+      - ../../services/api-gateway/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      AUTH_SERVICE_URL: http://auth-service:3010
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth-service
+    networks:
+      - deliveryos
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/auth-service.Dockerfile
+    container_name: deliveryos_auth_service
+    restart: unless-stopped
+    env_file:
+      - ../../services/auth-service/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3010
+      DATABASE_URL: postgresql://${POSTGRES_USER:-deliveryos}:${POSTGRES_PASSWORD:-deliveryos_secret}@postgres:5432/${POSTGRES_DB:-deliveryos}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - deliveryos
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

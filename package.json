@@ -4,13 +4,46 @@
   "license": "MIT",
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "dev": "turbo run dev --parallel",
+    "dev:apps": "turbo run dev --filter './apps/*'",
+    "dev:services": "turbo run dev --filter './services/*'",
+    "dev:customer": "pnpm --filter @deliveryos/customer-pwa run dev",
+    "dev:vendor": "pnpm --filter @deliveryos/vendor-pwa run dev",
+    "dev:rider": "pnpm --filter @deliveryos/rider-pwa run dev",
+    "dev:admin": "pnpm --filter @deliveryos/admin-panel run dev",
+    "dev:api-gateway": "pnpm --filter @deliveryos/api-gateway run dev",
+    "dev:auth": "pnpm --filter @deliveryos/auth-service run dev",
+    "build": "turbo run build",
+    "build:packages": "turbo run build --filter './packages/*'",
+    "typecheck": "turbo run typecheck",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint -- --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yaml,css}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yaml,css}\" --ignore-path .gitignore",
+    "clean": "turbo run clean && sh tools/scripts/clean.sh",
+    "setup": "sh tools/scripts/setup.sh",
+    "prepare": "husky"
   },
   "private": true,
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0",
     "prettier": "^3.8.3",
+    "tsup": "^8.0.0",
+    "turbo": "^2.0.0",
     "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "next": "15.3.3",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   }
 }
