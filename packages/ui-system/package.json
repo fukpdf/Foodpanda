@@ -18,8 +18,8 @@
     "./dist/styles.css"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean --external react --external react-dom",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch --external react --external react-dom",
+    "build": "tsup src/index.ts --format cjs,esm --clean --external react --external react-dom && tsc -p tsconfig.json",
+    "dev": "tsup src/index.ts --format cjs,esm --watch --external react --external react-dom",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

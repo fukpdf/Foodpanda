@@ -5,6 +5,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "esnext",
     "moduleResolution": "bundler",
+    "types": ["react", "react-dom"],
     "jsx": "react-jsx",
     "declaration": true,
     "declarationMap": true,

@@ -1,5 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import type { HealthCheckResponse } from "@deliveryos/shared-types";
+
+interface HealthCheckResponse {
+  status: string;
+  version: string;
+  uptime: number;
+  timestamp: string;
+}
 
 export async function registerHealthRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health", async (_request, reply) => {

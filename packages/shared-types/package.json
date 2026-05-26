@@ -14,8 +14,8 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts --format cjs,esm --clean && tsc -p tsconfig.json",
+    "dev": "tsup src/index.ts --format cjs,esm --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

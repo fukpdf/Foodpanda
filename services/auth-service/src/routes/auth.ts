@@ -1,169 +1,188 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { env } from "../config/env.js";
 import {
-  LoginBodySchema,
-  RegisterBodySchema,
-  RefreshTokenBodySchema,
-  ForgotPasswordBodySchema,
-  ResetPasswordBodySchema,
-  VerifyEmailBodySchema,
-  AuthResponseSchema,
-} from "../schemas/auth.schema.js";
-import type { LoginCredentials, RegisterPayload } from "@deliveryos/shared-types";
-import { HTTP_STATUS } from "@deliveryos/shared-utils";
+  registerController,
+  loginController,
+  refreshController,
+  logoutController,
+  logoutAllController,
+  meController,
+  sessionsController,
+} from "../controllers/auth.controller.js";
+import { authenticate } from "../middleware/authenticate.js";
+import {
+  registerSchema,
+  loginSchema,
+  refreshSchema,
+} from "../validators/auth.validators.js";
+import { fail } from "../utils/response.js";
+
+function validateBody<T>(schema: z.ZodType<T>, data: unknown): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const messages = result.error.issues
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join("; ");
+    throw Object.assign(new Error(messages), { statusCode: 400 });
+  }
+  return result.data;
+}
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
-  app.post<{ Body: LoginCredentials }>(
-    "/login",
-    {
-      schema: {
-        tags: ["Auth"],
-        summary: "Authenticate with email and password",
-        body: LoginBodySchema,
-        response: { 200: AuthResponseSchema },
+  const authRateLimit = {
+    config: {
+      rateLimit: {
+        max: env.RATE_LIMIT_AUTH_MAX,
+        timeWindow: env.RATE_LIMIT_WINDOW_MS,
       },
     },
-    async (request, reply) => {
-      request.log.info({ email: request.body.email }, "Login attempt");
-      return reply.status(HTTP_STATUS.OK).send({
-        success: true,
-        data: {
-          accessToken: "placeholder-access-token",
-          refreshToken: "placeholder-refresh-token",
-          expiresAt: new Date(Date.now() + 900_000).toISOString(),
-          tokenType: "Bearer",
-        },
-      });
-    }
-  );
+  };
 
-  app.post<{ Body: RegisterPayload }>(
+  const registerRateLimit = {
+    config: {
+      rateLimit: {
+        max: env.RATE_LIMIT_REGISTER_MAX,
+        timeWindow: env.RATE_LIMIT_WINDOW_MS,
+      },
+    },
+  };
+
+  // POST /auth/register
+  app.post(
     "/register",
     {
+      ...registerRateLimit,
       schema: {
         tags: ["Auth"],
         summary: "Register a new user account",
-        body: RegisterBodySchema,
+        body: {
+          type: "object",
+          required: ["email", "password", "confirmPassword", "firstName", "lastName"],
+          properties: {
+            email: { type: "string", format: "email" },
+            password: { type: "string", minLength: 8 },
+            confirmPassword: { type: "string" },
+            firstName: { type: "string" },
+            lastName: { type: "string" },
+            phone: { type: "string" },
+            role: { type: "string", enum: ["customer", "vendor", "rider"] },
+          },
+        },
       },
     },
     async (request, reply) => {
-      request.log.info({ email: request.body.email }, "Registration attempt");
-      return reply.status(HTTP_STATUS.CREATED).send({
-        success: true,
-        data: { message: "Verification email sent. Please check your inbox." },
-      });
-    }
+      const body = validateBody(registerSchema, request.body);
+      return registerController({ ...request, body } as any, reply);
+    },
   );
 
+  // POST /auth/login
+  app.post(
+    "/login",
+    {
+      ...authRateLimit,
+      schema: {
+        tags: ["Auth"],
+        summary: "Authenticate with email and password",
+        body: {
+          type: "object",
+          required: ["email", "password"],
+          properties: {
+            email: { type: "string", format: "email" },
+            password: { type: "string" },
+            device: {
+              type: "object",
+              properties: {
+                deviceId: { type: "string" },
+                deviceName: { type: "string" },
+                deviceType: { type: "string", enum: ["web", "ios", "android", "unknown"] },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = validateBody(loginSchema, request.body);
+      return loginController({ ...request, body } as any, reply);
+    },
+  );
+
+  // POST /auth/refresh
   app.post(
     "/refresh",
     {
+      ...authRateLimit,
       schema: {
         tags: ["Auth"],
-        summary: "Refresh access token using a valid refresh token",
-        body: RefreshTokenBodySchema,
-      },
-    },
-    async (_request, reply) => {
-      return reply.status(HTTP_STATUS.OK).send({
-        success: true,
-        data: {
-          accessToken: "placeholder-new-access-token",
-          expiresAt: new Date(Date.now() + 900_000).toISOString(),
-          tokenType: "Bearer",
+        summary: "Rotate refresh token and issue new access token",
+        body: {
+          type: "object",
+          required: ["refreshToken"],
+          properties: {
+            refreshToken: { type: "string" },
+          },
         },
-      });
-    }
-  );
-
-  app.post(
-    "/logout",
-    {
-      schema: {
-        tags: ["Auth"],
-        summary: "Invalidate the current session",
-      },
-    },
-    async (_request, reply) => {
-      return reply.status(HTTP_STATUS.NO_CONTENT).send();
-    }
-  );
-
-  app.post(
-    "/forgot-password",
-    {
-      schema: {
-        tags: ["Auth"],
-        summary: "Request a password reset email",
-        body: ForgotPasswordBodySchema,
-      },
-    },
-    async (_request, reply) => {
-      return reply.status(HTTP_STATUS.OK).send({
-        success: true,
-        data: { message: "If the account exists, a reset email has been sent." },
-      });
-    }
-  );
-
-  app.post(
-    "/reset-password",
-    {
-      schema: {
-        tags: ["Auth"],
-        summary: "Reset password using a valid reset token",
-        body: ResetPasswordBodySchema,
-      },
-    },
-    async (_request, reply) => {
-      return reply.status(HTTP_STATUS.OK).send({
-        success: true,
-        data: { message: "Password updated successfully." },
-      });
-    }
-  );
-
-  app.post(
-    "/verify-email",
-    {
-      schema: {
-        tags: ["Auth"],
-        summary: "Verify email address with token",
-        body: VerifyEmailBodySchema,
-      },
-    },
-    async (_request, reply) => {
-      return reply.status(HTTP_STATUS.OK).send({
-        success: true,
-        data: { message: "Email verified successfully." },
-      });
-    }
-  );
-
-  app.get(
-    "/me",
-    {
-      schema: {
-        tags: ["Auth"],
-        summary: "Get the currently authenticated user profile",
-        security: [{ bearerAuth: [] }],
       },
     },
     async (request, reply) => {
-      const authHeader = request.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return reply.status(HTTP_STATUS.UNAUTHORIZED).send({
-          success: false,
-          error: {
-            code: "UNAUTHORIZED",
-            message: "Authentication required",
-            timestamp: new Date().toISOString(),
-          },
-        });
-      }
-      return reply.status(HTTP_STATUS.OK).send({
-        success: true,
-        data: { message: "Auth context endpoint placeholder" },
+      const body = validateBody(refreshSchema, request.body);
+      return refreshController({ ...request, body } as any, reply);
+    },
+  );
+
+  // POST /auth/logout
+  app.post(
+    "/logout",
+    { preHandler: authenticate },
+    logoutController,
+  );
+
+  // POST /auth/logout-all
+  app.post(
+    "/logout-all",
+    { preHandler: authenticate },
+    logoutAllController,
+  );
+
+  // GET /auth/me
+  app.get(
+    "/me",
+    { preHandler: authenticate },
+    meController,
+  );
+
+  // GET /auth/sessions
+  app.get(
+    "/sessions",
+    { preHandler: authenticate },
+    sessionsController,
+  );
+
+  // GET /auth/public-key — allows API gateway and other services to fetch the public key
+  app.get(
+    "/public-key",
+    {},
+    async (_request, reply) => {
+      return reply.status(200).send({
+        publicKey: env.rsaKeys.publicKeyPem,
+        algorithm: "RS256",
+        issuer: env.JWT_ISSUER,
+        audience: env.JWT_AUDIENCE,
       });
-    }
+    },
+  );
+
+  // Future-ready stub: POST /auth/otp/request
+  // Architecture placeholder — returns 501 until OTP service is built
+  app.post(
+    "/otp/request",
+    {},
+    async (_request, reply) => {
+      return reply.status(501).send(
+        fail("NOT_IMPLEMENTED", "OTP authentication is not yet available"),
+      );
+    },
   );
 }

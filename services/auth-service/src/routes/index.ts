@@ -11,9 +11,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         async (authApi) => {
           await registerAuthRoutes(authApi);
         },
-        { prefix: "/auth" }
+        { prefix: "/auth" },
       );
     },
-    { prefix: "/api/v1" }
+    { prefix: "/api/v1" },
   );
 }

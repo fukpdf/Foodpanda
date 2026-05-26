@@ -61,7 +61,7 @@ type VariantToElement = {
 
 type TextVariant = NonNullable<VariantProps<typeof textVariants>["variant"]>;
 
-const defaultElements: Record<TextVariant, keyof JSX.IntrinsicElements> = {
+const defaultElements: Record<TextVariant, keyof React.JSX.IntrinsicElements> = {
   h1: "h1",
   h2: "h2",
   h3: "h3",
@@ -77,14 +77,14 @@ const defaultElements: Record<TextVariant, keyof JSX.IntrinsicElements> = {
   code: "code",
 };
 
-export type TextProps<T extends keyof JSX.IntrinsicElements = "p"> = {
+export type TextProps<T extends keyof React.JSX.IntrinsicElements = "p"> = {
   as?: T;
   className?: string;
   children?: React.ReactNode;
 } & VariantProps<typeof textVariants> &
-  Omit<JSX.IntrinsicElements[T], "color">;
+  Omit<React.JSX.IntrinsicElements[T], "color">;
 
-export function Text<T extends keyof JSX.IntrinsicElements = "p">({
+export function Text<T extends keyof React.JSX.IntrinsicElements = "p">({
   as,
   variant = "body",
   color,
