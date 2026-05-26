@@ -29,6 +29,22 @@
     },
     "clean": {
       "cache": false
+    },
+    "db:generate": {
+      "cache": false,
+      "outputs": ["src/migrations/**"]
+    },
+    "db:migrate": {
+      "cache": false,
+      "dependsOn": ["db:generate"]
+    },
+    "db:seed": {
+      "cache": false,
+      "dependsOn": ["db:migrate"]
+    },
+    "db:studio": {
+      "cache": false,
+      "persistent": true
     }
   }
 }
