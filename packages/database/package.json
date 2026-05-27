@@ -1,0 +1,34 @@
+{
+  "name": "@deliveryos/database",
+  "version": "0.1.0",
+  "description": "Shared database layer — Drizzle ORM schemas, repositories, migrations, and seed system",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts",
+    "./schemas": "./src/schemas/index.ts",
+    "./repositories": "./src/repositories/index.ts",
+    "./validators": "./src/validators/index.ts",
+    "./utils": "./src/utils/index.ts",
+    "./drizzle": "./src/drizzle.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/seed/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.7",
+    "postgres": "^3.4.9",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "catalog:",
+    "typescript": "~5.9.3"
+  }
+}
