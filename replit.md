@@ -12,6 +12,7 @@ Enterprise-grade food delivery ecosystem — a scalable, modular monorepo suppor
 - `pnpm run dev:api-gateway` — API Gateway (port 3000)
 - `pnpm run dev:auth` — Auth Service (port 3010)
 - `pnpm run dev:orders` — Order Service (port 3014)
+- `pnpm run dev:realtime` — Realtime Service (port 3019)
 
 ### Start everything
 - `pnpm run dev` — Start all apps and services in parallel (via Turborepo)
@@ -51,6 +52,7 @@ Enterprise-grade food delivery ecosystem — a scalable, modular monorepo suppor
   /api-gateway     → Single entry point     (@deliveryos/api-gateway, port 3000)
   /auth-service    → JWT auth & sessions    (@deliveryos/auth-service, port 3010)
   /order-service   → Order lifecycle + dispatch engine (@deliveryos/order-service, port 3014)
+  /realtime-service → WebSocket/SSE gateway, live order tracking (@deliveryos/realtime-service, port 3019)
 
 /packages
   /ui-system       → Shared React components (Button, Input, Card, Badge, Text, Spinner)
@@ -115,6 +117,7 @@ tsconfig.node.json   → Shared base tsconfig for Node.js services
 | Phase 2 | ✅ Done | Drizzle ORM — 10 schemas, full DB client, repositories, validators, seed |
 | Phase 3 | ✅ Done | RS256 JWT auth — keypair gen, signing, refresh tokens, Redis sessions |
 | Phase 4 | ✅ Done | Order lifecycle service — state machine, dispatch engine, 30 source files, zero type errors |
+| Phase 5 | ✅ Done | Realtime infrastructure — WebSocket + SSE gateway, JWT auth, channel subscriptions, HttpRealtimeAdapter, zero type errors |
 
 ## Future microservices (ports 3011–3020)
 
@@ -128,12 +131,11 @@ tsconfig.node.json   → Shared base tsconfig for Node.js services
 | wallet-service | 3016 | Planned |
 | payment-service | 3017 | Planned (Phase 6) |
 | notification-service | 3018 | Planned |
-| realtime-service | 3019 | Planned (Phase 5) |
+| realtime-service | 3019 | ✅ Built (Phase 5) |
 | analytics-service | 3020 | Planned |
 
 ## Recommended next phases
 
-- **Phase 5**: Realtime — WebSocket/SSE server for live order tracking
 - **Phase 6**: Payments — Stripe integration in payment-service
 - **Phase 7**: Notifications — push/SMS/email via notification-service
 - **Phase 8**: Vendor & menu services — full CRUD with image upload

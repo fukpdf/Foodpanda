@@ -11,6 +11,7 @@ import { registerAuditHandler } from "./events/handlers/audit.handler.js";
 import {
   registerRealtimeHandler,
   InMemoryRealtimeAdapter,
+  HttpRealtimeAdapter,
 } from "./events/handlers/realtime.handler.js";
 import { OrderService } from "./services/order.service.js";
 import { DispatchService } from "./services/dispatch.service.js";
@@ -70,7 +71,11 @@ export async function buildServer() {
 
   registerAuditHandler(db, eventBus);
 
-  const realtimeAdapter = new InMemoryRealtimeAdapter();
+  const realtimeAdapter =
+    env.REALTIME_SERVICE_URL && env.REALTIME_INTERNAL_KEY
+      ? new HttpRealtimeAdapter(env.REALTIME_SERVICE_URL, env.REALTIME_INTERNAL_KEY)
+      : new InMemoryRealtimeAdapter();
+
   registerRealtimeHandler(eventBus, realtimeAdapter);
 
   const orderService = new OrderService(db, eventBus);

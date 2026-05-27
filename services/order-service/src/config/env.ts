@@ -48,6 +48,9 @@ const OrderEnvSchema = z.object({
     .default(
       "http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004",
     ),
+
+  REALTIME_SERVICE_URL: z.string().url().optional(),
+  REALTIME_INTERNAL_KEY: z.string().min(1).optional(),
 });
 
 export type OrderEnv = z.infer<typeof OrderEnvSchema>;
