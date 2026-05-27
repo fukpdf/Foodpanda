@@ -2,15 +2,21 @@ import { relations } from "drizzle-orm";
 import { authSessions } from "../schemas/auth-sessions.js";
 import { auditLogs } from "../schemas/audit-logs.js";
 import { customerAddresses } from "../schemas/customer-addresses.js";
+import { idempotencyKeys } from "../schemas/idempotency-keys.js";
 import { ordersFoundation } from "../schemas/orders.js";
+import { paymentAttempts } from "../schemas/payment-attempts.js";
+import { paymentEvents } from "../schemas/payment-events.js";
+import { payments } from "../schemas/payments.js";
 import { permissions, rolePermissions, userPermissions } from "../schemas/permissions.js";
 import { refreshTokens } from "../schemas/refresh-tokens.js";
+import { refunds } from "../schemas/refunds.js";
 import { riders } from "../schemas/riders.js";
 import { roles, userRoles } from "../schemas/roles.js";
 import { userProfiles } from "../schemas/user-profiles.js";
 import { users } from "../schemas/users.js";
 import { vendorBranches } from "../schemas/vendor-branches.js";
 import { vendors } from "../schemas/vendors.js";
+import { webhookEvents } from "../schemas/webhook-events.js";
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(userProfiles, {
@@ -175,3 +181,56 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
+  order: one(ordersFoundation, {
+    fields: [payments.orderId],
+    references: [ordersFoundation.id],
+  }),
+  customer: one(users, {
+    fields: [payments.customerId],
+    references: [users.id],
+  }),
+  attempts: many(paymentAttempts),
+  events: many(paymentEvents),
+  refunds: many(refunds),
+}));
+
+export const paymentAttemptsRelations = relations(paymentAttempts, ({ one }) => ({
+  payment: one(payments, {
+    fields: [paymentAttempts.paymentId],
+    references: [payments.id],
+  }),
+  order: one(ordersFoundation, {
+    fields: [paymentAttempts.orderId],
+    references: [ordersFoundation.id],
+  }),
+}));
+
+export const paymentEventsRelations = relations(paymentEvents, ({ one }) => ({
+  payment: one(payments, {
+    fields: [paymentEvents.paymentId],
+    references: [payments.id],
+  }),
+  order: one(ordersFoundation, {
+    fields: [paymentEvents.orderId],
+    references: [ordersFoundation.id],
+  }),
+}));
+
+export const refundsRelations = relations(refunds, ({ one }) => ({
+  payment: one(payments, {
+    fields: [refunds.paymentId],
+    references: [payments.id],
+  }),
+  order: one(ordersFoundation, {
+    fields: [refunds.orderId],
+    references: [ordersFoundation.id],
+  }),
+  initiatedBy: one(users, {
+    fields: [refunds.initiatedById],
+    references: [users.id],
+  }),
+}));
+
+export { idempotencyKeys, webhookEvents };

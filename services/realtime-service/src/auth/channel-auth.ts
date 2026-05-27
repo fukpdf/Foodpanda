@@ -27,7 +27,11 @@ export function authorizeChannel(
   const { role, userId } = principal;
   const isAdmin = role === "admin" || role === "superadmin";
 
-  if (channel === "admin:dispatch" || channel === "admin:orders") {
+  if (
+    channel === "admin:dispatch" ||
+    channel === "admin:orders" ||
+    channel === "admin:payments"
+  ) {
     if (isAdmin) return { allowed: true };
     return { allowed: false, reason: "Admin-only channel" };
   }
@@ -78,7 +82,12 @@ export function isValidChannel(channel: string): boolean {
   if (typeof channel !== "string") return false;
   if (channel.length === 0 || channel.length > MAX_CHANNEL_LENGTH) return false;
 
-  if (channel === "admin:dispatch" || channel === "admin:orders") return true;
+  if (
+    channel === "admin:dispatch" ||
+    channel === "admin:orders" ||
+    channel === "admin:payments"
+  )
+    return true;
 
   const parsed = parseChannel(channel);
   if (!parsed) return false;
@@ -93,7 +102,12 @@ export function isValidChannel(channel: string): boolean {
 }
 
 export function extractChannelCategory(channel: string): string | null {
-  if (channel === "admin:dispatch" || channel === "admin:orders") return "admin";
+  if (
+    channel === "admin:dispatch" ||
+    channel === "admin:orders" ||
+    channel === "admin:payments"
+  )
+    return "admin";
   const parsed = parseChannel(channel);
   return parsed?.category ?? null;
 }

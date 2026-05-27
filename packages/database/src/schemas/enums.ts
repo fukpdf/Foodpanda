@@ -132,3 +132,40 @@ export const auditActionEnum = pgEnum("audit_action", [
   "role_change",
   "permission_change",
 ]);
+
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "pending_provider",
+  "processing",
+  "requires_action",
+  "authorized",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "refunded",
+  "partially_refunded",
+  "disputed",
+  "expired",
+]);
+
+export const paymentProviderEnum = pgEnum("payment_provider", [
+  "stripe",
+  "razorpay",
+  "paypal",
+  "adyen",
+]);
+
+export const refundStatusEnum = pgEnum("refund_status", [
+  "pending",
+  "processing",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
+
+export const refundReasonEnum = pgEnum("refund_reason", [
+  "duplicate",
+  "fraudulent",
+  "requested_by_customer",
+  "order_cancelled",
+  "system",
+]);

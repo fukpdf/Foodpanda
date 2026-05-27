@@ -82,7 +82,7 @@ export async function buildServer() {
   const dispatchService = new DispatchService(db, eventBus, env);
   const controller = new OrderController(orderService, dispatchService);
 
-  await registerRoutes(app, controller);
+  await registerRoutes(app, controller, db, env.PAYMENT_SERVICE_INTERNAL_KEY);
 
   return app;
 }

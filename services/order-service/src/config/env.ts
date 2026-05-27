@@ -51,6 +51,11 @@ const OrderEnvSchema = z.object({
 
   REALTIME_SERVICE_URL: z.string().url().optional(),
   REALTIME_INTERNAL_KEY: z.string().min(1).optional(),
+
+  PAYMENT_SERVICE_INTERNAL_KEY: z
+    .string()
+    .min(32, "PAYMENT_SERVICE_INTERNAL_KEY must be at least 32 chars")
+    .optional(),
 });
 
 export type OrderEnv = z.infer<typeof OrderEnvSchema>;
