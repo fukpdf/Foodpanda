@@ -26,18 +26,6 @@ export interface RealtimeWsSession {
   userAgent: string;
 }
 
-export interface RealtimeSseSession {
-  id: string;
-  principal: AuthenticatedPrincipal;
-  connectedAt: Date;
-  channel: string;
-  ip: string;
-  userAgent: string;
-  write: (event: string, data: unknown) => void;
-  writeComment: (comment: string) => void;
-  end: () => void;
-}
-
 export interface OrderContextEntry {
   orderId: string;
   customerId: string;

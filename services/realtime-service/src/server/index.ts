@@ -76,7 +76,7 @@ export async function buildServer() {
   const publisher = new EventPublisher(subscriptions, connections, sse);
   const eventHandler = new EventHandler(publisher);
   const metrics = new MetricsService(connections, sse, subscriptions, eventHandler);
-  const heartbeat = new HeartbeatManager(connections);
+  const heartbeat = new HeartbeatManager(connections, subscriptions);
 
   registerErrorHandler(app);
 
@@ -90,11 +90,14 @@ export async function buildServer() {
 
   app.addHook("onReady", async () => {
     heartbeat.start();
-    app.log.info("Heartbeat manager started");
+    eventHandler.startGc();
+    app.log.info("Heartbeat manager and cache GC started");
   });
 
   app.addHook("onClose", async () => {
     heartbeat.stop();
+    eventHandler.stopGc();
+    app.log.info("Heartbeat manager and cache GC stopped");
   });
 
   return app;

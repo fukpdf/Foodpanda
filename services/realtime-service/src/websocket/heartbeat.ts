@@ -1,10 +1,14 @@
 import type { ConnectionManager } from "./connection-manager.js";
+import type { SubscriptionManager } from "../subscriptions/subscription-manager.js";
 import { env } from "../config/env.js";
 
 export class HeartbeatManager {
   private intervalId: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly connections: ConnectionManager) {}
+  constructor(
+    private readonly connections: ConnectionManager,
+    private readonly subscriptions: SubscriptionManager,
+  ) {}
 
   start(): void {
     if (this.intervalId) return;
@@ -44,6 +48,7 @@ export class HeartbeatManager {
           session.socket.terminate();
         } catch {
         }
+        this.subscriptions.unsubscribeAll(id);
         this.connections.remove(id);
       }
     }

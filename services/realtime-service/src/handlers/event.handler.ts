@@ -8,9 +8,12 @@ const TERMINAL_STATES = new Set([
 ]);
 
 const CACHE_EVICTION_DELAY_MS = 5 * 60 * 1000;
+const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const CACHE_GC_INTERVAL_MS = 60 * 60 * 1000;
 
 export class EventHandler {
   private readonly orderContextCache = new Map<string, OrderContextEntry>();
+  private gcIntervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly publisher: EventPublisher) {}
 
@@ -25,6 +28,33 @@ export class EventHandler {
 
     if (TERMINAL_STATES.has(event.eventType)) {
       this.scheduleContextEviction(event.orderId);
+    }
+  }
+
+  startGc(): void {
+    if (this.gcIntervalId) return;
+    this.gcIntervalId = setInterval(() => {
+      this.runCacheGc();
+    }, CACHE_GC_INTERVAL_MS);
+  }
+
+  stopGc(): void {
+    if (this.gcIntervalId) {
+      clearInterval(this.gcIntervalId);
+      this.gcIntervalId = null;
+    }
+  }
+
+  private runCacheGc(): void {
+    const cutoff = Date.now() - CACHE_MAX_AGE_MS;
+    let evicted = 0;
+    for (const [orderId, entry] of this.orderContextCache) {
+      if (entry.cachedAt.getTime() < cutoff) {
+        this.orderContextCache.delete(orderId);
+        evicted++;
+      }
+    }
+    if (evicted > 0) {
     }
   }
 
@@ -85,7 +115,10 @@ export class EventHandler {
       return;
     }
 
-    if (event.eventType === "dispatch.rider_assigned" || event.eventType === "order.state_changed") {
+    if (
+      event.eventType === "dispatch.rider_assigned" ||
+      event.eventType === "order.state_changed"
+    ) {
       const { riderId } = event.payload;
       if (typeof riderId === "string" && existing) {
         this.orderContextCache.set(event.orderId, {

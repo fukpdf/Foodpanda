@@ -3,6 +3,7 @@ import type { WebSocket } from "@fastify/websocket";
 import { randomUUID } from "node:crypto";
 
 type RawData = Buffer | ArrayBuffer | Buffer[];
+
 import type { ConnectionManager } from "../websocket/connection-manager.js";
 import type { SubscriptionManager } from "../subscriptions/subscription-manager.js";
 import { createWsSession } from "../websocket/session.js";
@@ -11,6 +12,8 @@ import { validateSubscription } from "../subscriptions/channel-rules.js";
 import type { ClientMessage, ServerMessage } from "../types/message.types.js";
 import { isClientMessage } from "../types/message.types.js";
 import { env } from "../config/env.js";
+
+const MAX_MESSAGE_BYTES = 4_096;
 
 function send(socket: WebSocket, message: ServerMessage): void {
   try {
@@ -21,6 +24,12 @@ function send(socket: WebSocket, message: ServerMessage): void {
   }
 }
 
+function measureBytes(raw: RawData): number {
+  if (Buffer.isBuffer(raw)) return raw.length;
+  if (raw instanceof ArrayBuffer) return raw.byteLength;
+  return (raw as Buffer[]).reduce((sum, b) => sum + b.length, 0);
+}
+
 export async function registerWebSocketRoute(
   app: FastifyInstance,
   connections: ConnectionManager,
@@ -28,7 +37,15 @@ export async function registerWebSocketRoute(
 ): Promise<void> {
   app.get(
     "/ws",
-    { websocket: true },
+    {
+      websocket: true,
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: 60_000,
+        },
+      },
+    },
     async (socket: WebSocket, request) => {
       const ip =
         (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ??
@@ -93,79 +110,102 @@ export async function registerWebSocketRoute(
         connections.markAlive(sessionId);
       });
 
-      socket.on("message", (raw: RawData) => {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(raw.toString());
-        } catch {
-          send(socket, {
-            type: "error",
-            code: "INVALID_JSON",
-            message: "Message must be valid JSON",
-          });
-          return;
-        }
-
-        if (!isClientMessage(parsed)) {
-          send(socket, {
-            type: "error",
-            code: "UNKNOWN_MESSAGE_TYPE",
-            message: "Unknown message type",
-          });
-          return;
-        }
-
-        const msg = parsed as ClientMessage;
-
-        if (msg.type === "ping") {
-          send(socket, { type: "pong", timestamp: new Date().toISOString() });
-          connections.markAlive(sessionId);
-          return;
-        }
-
-        if (msg.type === "subscribe") {
-          const currentCount = subscriptions.getSubscriptionCountForSession(sessionId);
-          const result = validateSubscription(msg.channel, principal, currentCount);
-
-          if (!result.valid) {
-            send(socket, {
-              type: "error",
-              code: "SUBSCRIPTION_DENIED",
-              message: result.reason ?? "Subscription denied",
-            });
-            return;
-          }
-
-          subscriptions.subscribe(sessionId, msg.channel);
-          send(socket, { type: "subscribed", channel: msg.channel });
-
-          app.log.info(
-            { sessionId, channel: msg.channel, userId: principal.userId },
-            "WebSocket subscription added",
-          );
-          return;
-        }
-
-        if (msg.type === "unsubscribe") {
-          subscriptions.unsubscribe(sessionId, msg.channel);
-          send(socket, { type: "unsubscribed", channel: msg.channel });
-          return;
-        }
-      });
-
-      socket.on("close", () => {
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         subscriptions.unsubscribeAll(sessionId);
         connections.remove(sessionId);
         app.log.info(
           { sessionId, userId: principal.userId },
           "WebSocket client disconnected",
         );
+      };
+
+      socket.on("message", (raw: RawData) => {
+        try {
+          const byteSize = measureBytes(raw);
+          if (byteSize > MAX_MESSAGE_BYTES) {
+            send(socket, {
+              type: "error",
+              code: "MESSAGE_TOO_LARGE",
+              message: `Message exceeds maximum size of ${MAX_MESSAGE_BYTES} bytes`,
+            });
+            return;
+          }
+
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(raw.toString());
+          } catch {
+            send(socket, {
+              type: "error",
+              code: "INVALID_JSON",
+              message: "Message must be valid JSON",
+            });
+            return;
+          }
+
+          if (!isClientMessage(parsed)) {
+            send(socket, {
+              type: "error",
+              code: "UNKNOWN_MESSAGE_TYPE",
+              message: "Unknown message type or missing required fields",
+            });
+            return;
+          }
+
+          const msg = parsed as ClientMessage;
+
+          if (msg.type === "ping") {
+            send(socket, { type: "pong", timestamp: new Date().toISOString() });
+            connections.markAlive(sessionId);
+            return;
+          }
+
+          if (msg.type === "subscribe") {
+            const currentCount = subscriptions.getSubscriptionCountForSession(sessionId);
+            const result = validateSubscription(msg.channel, principal, currentCount);
+
+            if (!result.valid) {
+              send(socket, {
+                type: "error",
+                code: "SUBSCRIPTION_DENIED",
+                message: result.reason ?? "Subscription denied",
+              });
+              return;
+            }
+
+            subscriptions.subscribe(sessionId, msg.channel);
+            send(socket, { type: "subscribed", channel: msg.channel });
+
+            app.log.info(
+              { sessionId, channel: msg.channel, userId: principal.userId },
+              "WebSocket subscription added",
+            );
+            return;
+          }
+
+          if (msg.type === "unsubscribe") {
+            subscriptions.unsubscribe(sessionId, msg.channel);
+            send(socket, { type: "unsubscribed", channel: msg.channel });
+            return;
+          }
+        } catch (err) {
+          app.log.warn({ err, sessionId }, "Error processing WebSocket message");
+          send(socket, {
+            type: "error",
+            code: "INTERNAL_ERROR",
+            message: "Message processing failed",
+          });
+        }
       });
 
+      socket.on("close", cleanup);
+
       socket.on("error", (err: Error) => {
-        app.log.warn({ err, sessionId }, "WebSocket error");
-        subscriptions.unsubscribeAll(sessionId);
-        connections.remove(sessionId);
+        app.log.warn({ err, sessionId }, "WebSocket socket error");
+        cleanup();
       });
     },
   );

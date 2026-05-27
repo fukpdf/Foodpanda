@@ -72,9 +72,12 @@ export type ServerMessage =
 export function isClientMessage(raw: unknown): raw is ClientMessage {
   if (typeof raw !== "object" || raw === null) return false;
   const obj = raw as Record<string, unknown>;
-  return (
-    obj["type"] === "subscribe" ||
-    obj["type"] === "unsubscribe" ||
-    obj["type"] === "ping"
-  );
+
+  if (obj["type"] === "ping") return true;
+
+  if (obj["type"] === "subscribe" || obj["type"] === "unsubscribe") {
+    return typeof obj["channel"] === "string" && (obj["channel"] as string).length > 0;
+  }
+
+  return false;
 }

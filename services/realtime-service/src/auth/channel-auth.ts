@@ -5,6 +5,12 @@ export interface ChannelAuthResult {
   reason?: string;
 }
 
+const MAX_CHANNEL_LENGTH = 256;
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const UUID_CATEGORIES = new Set(["order", "customer", "vendor", "rider"]);
+
 function parseChannel(channel: string): { category: string; id: string } | null {
   const colonIdx = channel.indexOf(":");
   if (colonIdx === -1) return null;
@@ -69,12 +75,20 @@ export function authorizeChannel(
 }
 
 export function isValidChannel(channel: string): boolean {
+  if (typeof channel !== "string") return false;
+  if (channel.length === 0 || channel.length > MAX_CHANNEL_LENGTH) return false;
+
   if (channel === "admin:dispatch" || channel === "admin:orders") return true;
+
   const parsed = parseChannel(channel);
   if (!parsed) return false;
-  const validCategories = ["order", "customer", "vendor", "rider"];
-  if (!validCategories.includes(parsed.category)) return false;
-  if (!parsed.id || parsed.id.length === 0) return false;
+
+  const { category, id } = parsed;
+
+  if (!UUID_CATEGORIES.has(category)) return false;
+  if (!id || id.length === 0) return false;
+  if (!UUID_REGEX.test(id)) return false;
+
   return true;
 }
 
