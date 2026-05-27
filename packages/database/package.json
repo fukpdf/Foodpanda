@@ -9,7 +9,8 @@
     "./schemas": "./src/schemas/index.ts",
     "./repositories": "./src/repositories/index.ts",
     "./validators": "./src/validators/index.ts",
-    "./utils": "./src/utils/index.ts"
+    "./utils": "./src/utils/index.ts",
+    "./drizzle": "./src/drizzle.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

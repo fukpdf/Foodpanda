@@ -11,6 +11,7 @@ Enterprise-grade food delivery ecosystem — a scalable, modular monorepo suppor
 - `pnpm run dev:admin` — Admin Panel (port 3004)
 - `pnpm run dev:api-gateway` — API Gateway (port 3000)
 - `pnpm run dev:auth` — Auth Service (port 3010)
+- `pnpm run dev:orders` — Order Service (port 3014)
 
 ### Start everything
 - `pnpm run dev` — Start all apps and services in parallel (via Turborepo)
@@ -49,6 +50,7 @@ Enterprise-grade food delivery ecosystem — a scalable, modular monorepo suppor
 /services
   /api-gateway     → Single entry point     (@deliveryos/api-gateway, port 3000)
   /auth-service    → JWT auth & sessions    (@deliveryos/auth-service, port 3010)
+  /order-service   → Order lifecycle + dispatch engine (@deliveryos/order-service, port 3014)
 
 /packages
   /ui-system       → Shared React components (Button, Input, Card, Badge, Text, Spinner)
@@ -103,26 +105,35 @@ tsconfig.node.json   → Shared base tsconfig for Node.js services
 - Services use `"type": "module"` and NodeNext module resolution
 - Each app has its own brand color palette defined in `globals.css` via `@theme {}`
 - The `pnpm-workspace.yaml` `minimumReleaseAge: 1440` may block same-day package installs
+- `@deliveryos/database/drizzle` sub-path re-exports all drizzle-orm operators — services must import from there, not directly from `drizzle-orm`
+
+## Completed phases
+
+| Phase | Status | Summary |
+|---|---|---|
+| Phase 1 | ✅ Done | All 4 PWAs + 2 services scaffolded, shared packages, Turborepo pipeline |
+| Phase 2 | ✅ Done | Drizzle ORM — 10 schemas, full DB client, repositories, validators, seed |
+| Phase 3 | ✅ Done | RS256 JWT auth — keypair gen, signing, refresh tokens, Redis sessions |
+| Phase 4 | ✅ Done | Order lifecycle service — state machine, dispatch engine, 30 source files, zero type errors |
 
 ## Future microservices (ports 3011–3020)
 
-| Service | Port | Purpose |
+| Service | Port | Status |
 |---|---|---|
-| user-service | 3011 | Profile & address management |
-| vendor-service | 3012 | Vendor registration & settings |
-| menu-service | 3013 | Menu CRUD & availability |
-| order-service | 3014 | Order lifecycle management |
-| dispatch-service | 3015 | Rider matching & routing |
-| wallet-service | 3016 | In-app wallet & credits |
-| payment-service | 3017 | Stripe/payment gateway integration |
-| notification-service | 3018 | Push/SMS/email notifications |
-| realtime-service | 3019 | WebSocket / SSE for live tracking |
-| analytics-service | 3020 | Metrics, reporting, BI |
+| user-service | 3011 | Planned |
+| vendor-service | 3012 | Planned |
+| menu-service | 3013 | Planned |
+| order-service | 3014 | ✅ Built |
+| dispatch-service | 3015 | Merged into order-service (Phase 4) |
+| wallet-service | 3016 | Planned |
+| payment-service | 3017 | Planned (Phase 6) |
+| notification-service | 3018 | Planned |
+| realtime-service | 3019 | Planned (Phase 5) |
+| analytics-service | 3020 | Planned |
 
 ## Recommended next phases
 
-- **Phase 2**: Database layer — Drizzle ORM schemas per service, migrations
-- **Phase 3**: Auth implementation — bcrypt, JWT signing, Redis session store
-- **Phase 4**: Order flow — full CRUD for orders with state machine
-- **Phase 5**: Realtime — WebSocket server for live order tracking
+- **Phase 5**: Realtime — WebSocket/SSE server for live order tracking
 - **Phase 6**: Payments — Stripe integration in payment-service
+- **Phase 7**: Notifications — push/SMS/email via notification-service
+- **Phase 8**: Vendor & menu services — full CRUD with image upload

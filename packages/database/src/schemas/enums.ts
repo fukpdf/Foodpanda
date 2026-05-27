@@ -81,6 +81,7 @@ export const orderStatusEnum = pgEnum("order_status", [
   "draft",
   "pending",
   "confirmed",
+  "accepted_by_vendor",
   "preparing",
   "ready_for_pickup",
   "assigned_to_rider",
@@ -90,6 +91,23 @@ export const orderStatusEnum = pgEnum("order_status", [
   "cancelled",
   "refunded",
   "failed",
+]);
+
+export const dispatchStatusEnum = pgEnum("dispatch_status", [
+  "pending",
+  "accepted",
+  "rejected",
+  "cancelled",
+  "completed",
+  "expired",
+]);
+
+export const cancellationActorEnum = pgEnum("cancellation_actor", [
+  "customer",
+  "vendor",
+  "rider",
+  "system",
+  "admin",
 ]);
 
 export const addressLabelEnum = pgEnum("address_label", [

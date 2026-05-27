@@ -13,6 +13,7 @@
     "dev:admin": "pnpm --filter @deliveryos/admin-panel run dev",
     "dev:api-gateway": "pnpm --filter @deliveryos/api-gateway run dev",
     "dev:auth": "pnpm --filter @deliveryos/auth-service run dev",
+    "dev:orders": "pnpm --filter @deliveryos/order-service run dev",
     "build": "turbo run build",
     "build:packages": "turbo run build --filter './packages/*'",
     "typecheck": "turbo run typecheck",

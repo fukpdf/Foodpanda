@@ -10,4 +10,7 @@ export * from "./vendor-branches.js";
 export * from "./riders.js";
 export * from "./customer-addresses.js";
 export * from "./orders.js";
+export * from "./order-items.js";
+export * from "./order-state-history.js";
+export * from "./dispatch-assignments.js";
 export * from "./audit-logs.js";
