@@ -84,9 +84,13 @@ export const orderStatusEnum = pgEnum("order_status", [
   "accepted_by_vendor",
   "preparing",
   "ready_for_pickup",
+  "dispatch_created",
   "assigned_to_rider",
+  "rider_accepted",
+  "arrived_at_vendor",
   "picked_up",
   "in_transit",
+  "arrived_at_customer",
   "delivered",
   "cancelled",
   "refunded",
@@ -95,11 +99,15 @@ export const orderStatusEnum = pgEnum("order_status", [
 
 export const dispatchStatusEnum = pgEnum("dispatch_status", [
   "pending",
+  "offer_pending",
   "accepted",
   "rejected",
   "cancelled",
   "completed",
   "expired",
+  "arrived_vendor",
+  "in_transit",
+  "arrived_customer",
 ]);
 
 export const cancellationActorEnum = pgEnum("cancellation_actor", [

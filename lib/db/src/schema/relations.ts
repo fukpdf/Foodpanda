@@ -1,7 +1,11 @@
 import { relations } from "drizzle-orm";
+import { assignmentAttempts } from "./assignment-attempts.js";
 import { authSessions } from "./auth-sessions.js";
 import { auditLogs } from "./audit-logs.js";
 import { customerAddresses } from "./customer-addresses.js";
+import { deliveryProofs } from "./delivery-proofs.js";
+import { dispatchEvents } from "./dispatch-events.js";
+import { dispatches } from "./dispatches.js";
 import { ordersFoundation } from "./orders.js";
 import { paymentAttempts } from "./payment-attempts.js";
 import { paymentEvents } from "./payment-events.js";
@@ -9,6 +13,7 @@ import { payments } from "./payments.js";
 import { permissions, rolePermissions, userPermissions } from "./permissions.js";
 import { refreshTokens } from "./refresh-tokens.js";
 import { refunds } from "./refunds.js";
+import { riderLocations } from "./rider-locations.js";
 import { riders } from "./riders.js";
 import { roles, userRoles } from "./roles.js";
 import { userProfiles } from "./user-profiles.js";
@@ -228,5 +233,67 @@ export const refundsRelations = relations(refunds, ({ one }) => ({
   initiatedBy: one(users, {
     fields: [refunds.initiatedById],
     references: [users.id],
+  }),
+}));
+
+export const dispatchesRelations = relations(dispatches, ({ one, many }) => ({
+  order: one(ordersFoundation, {
+    fields: [dispatches.orderId],
+    references: [ordersFoundation.id],
+  }),
+  currentRider: one(riders, {
+    fields: [dispatches.currentRiderId],
+    references: [riders.id],
+  }),
+  events: many(dispatchEvents),
+  attempts: many(assignmentAttempts),
+  proofs: many(deliveryProofs),
+}));
+
+export const dispatchEventsRelations = relations(dispatchEvents, ({ one }) => ({
+  dispatch: one(dispatches, {
+    fields: [dispatchEvents.dispatchId],
+    references: [dispatches.id],
+  }),
+  rider: one(riders, {
+    fields: [dispatchEvents.riderId],
+    references: [riders.id],
+  }),
+  actor: one(users, {
+    fields: [dispatchEvents.actorId],
+    references: [users.id],
+  }),
+}));
+
+export const riderLocationsRelations = relations(riderLocations, ({ one }) => ({
+  rider: one(riders, {
+    fields: [riderLocations.riderId],
+    references: [riders.id],
+  }),
+  order: one(ordersFoundation, {
+    fields: [riderLocations.orderId],
+    references: [ordersFoundation.id],
+  }),
+}));
+
+export const assignmentAttemptsRelations = relations(assignmentAttempts, ({ one }) => ({
+  dispatch: one(dispatches, {
+    fields: [assignmentAttempts.dispatchId],
+    references: [dispatches.id],
+  }),
+  rider: one(riders, {
+    fields: [assignmentAttempts.riderId],
+    references: [riders.id],
+  }),
+}));
+
+export const deliveryProofsRelations = relations(deliveryProofs, ({ one }) => ({
+  dispatch: one(dispatches, {
+    fields: [deliveryProofs.dispatchId],
+    references: [dispatches.id],
+  }),
+  rider: one(riders, {
+    fields: [deliveryProofs.riderId],
+    references: [riders.id],
   }),
 }));

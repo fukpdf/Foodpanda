@@ -54,6 +54,11 @@ export const riders = pgTable(
     averageRating: doublePrecision("average_rating"),
     totalRatingCount: integer("total_rating_count").notNull().default(0),
 
+    acceptanceRate: doublePrecision("acceptance_rate").notNull().default(1.0),
+    totalOffersReceived: integer("total_offers_received").notNull().default(0),
+    totalOffersAccepted: integer("total_offers_accepted").notNull().default(0),
+    activeDeliveryCount: integer("active_delivery_count").notNull().default(0),
+
     bankAccountDetails: jsonb("bank_account_details")
       .$type<{ bankName?: string; accountNumber?: string; routingNumber?: string }>()
       .default({}),
