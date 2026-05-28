@@ -1,0 +1,2 @@
+- [DeliveryOS workspace layout](deliveryos-workspace.md) — active workspace uses @workspace/* names; all DeliveryOS schemas live in lib/db/src/schema/ (singular); services/* added to pnpm-workspace.yaml for Phase 7
+- [Batch 0 schema port](batch0-schema-port.md) — lib/db was empty scaffold; all 22 tables + relations ported from .migration-backup; typecheck clean; Phase 7 tables NOT yet added
