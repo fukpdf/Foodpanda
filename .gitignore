@@ -47,3 +47,8 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Migration backup — Replit-internal only, must not ship to GitHub.
+# Its .replit file (modules = ["nodejs-20", "web", "bash"]) triggers
+# Replit's import-migration detector on a fresh clone.
+.migration-backup/
