@@ -26,6 +26,28 @@ export class InMemoryRealtimeAdapter implements RealtimeAdapter {
   }
 }
 
+export class HttpRealtimeAdapter implements RealtimeAdapter {
+  constructor(
+    private readonly realtimeServiceUrl: string,
+    private readonly internalApiKey: string,
+  ) {}
+
+  async broadcast(channel: string, payload: OrderEvent): Promise<void> {
+    try {
+      await fetch(`${this.realtimeServiceUrl}/internal/events`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Key": this.internalApiKey,
+        },
+        body: JSON.stringify({ channel, event: payload }),
+        signal: AbortSignal.timeout(5_000),
+      });
+    } catch {
+    }
+  }
+}
+
 export function registerRealtimeHandler(
   bus: EventBus,
   adapter: RealtimeAdapter,
