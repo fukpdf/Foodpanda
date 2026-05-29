@@ -1,2 +1,4 @@
 - [DeliveryOS workspace layout](deliveryos-workspace.md) — active workspace uses @workspace/* names; all DeliveryOS schemas live in lib/db/src/schema/ (singular); services/* added to pnpm-workspace.yaml for Phase 7
 - [Batch 0 schema port](batch0-schema-port.md) — lib/db was empty scaffold; all 22 tables + relations ported from .migration-backup; typecheck clean; Phase 7 tables NOT yet added
+- [DeliveryOS workspace DB adapter](deliveryos-db-adapter.md) — @workspace/db exports `db` singleton (no createDatabase); cast to NodePgDatabase<Record<string,unknown>> in services; drizzle ops use drizzle-orm directly
+- [DeliveryOS order-service Phase 7 state machine](deliveryos-order-state-machine.md) — Batch 2 states, transition chain, timestamp gaps, dispatch gate, internal route layout
