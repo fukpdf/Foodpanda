@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import helmet from "@fastify/helmet";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import { createDatabase } from "@deliveryos/database";
+import { db } from "@workspace/db";
 import { env } from "./config/env.js";
 import { registerErrorHandler } from "./middleware/error-handler.js";
 import { registerRoutes } from "./routes/index.js";
@@ -16,6 +16,7 @@ import {
 import { OrderService } from "./services/order.service.js";
 import { DispatchService } from "./services/dispatch.service.js";
 import { OrderController } from "./controllers/order.controller.js";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 export async function buildServer() {
   const app = Fastify({
@@ -44,7 +45,7 @@ export async function buildServer() {
     origin: env.isDev ? true : env.allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID", "X-Internal-Key"],
     exposedHeaders: ["X-Request-ID"],
   });
 
@@ -67,22 +68,32 @@ export async function buildServer() {
 
   registerErrorHandler(app);
 
-  const db = createDatabase(env.DATABASE_URL);
+  // Use @workspace/db singleton — type cast to satisfy generic parameter
+  const typedDb = db as NodePgDatabase<Record<string, unknown>>;
 
-  registerAuditHandler(db, eventBus);
+  registerAuditHandler(typedDb, eventBus);
 
   const realtimeAdapter =
     env.REALTIME_SERVICE_URL && env.REALTIME_INTERNAL_KEY
-      ? new HttpRealtimeAdapter(env.REALTIME_SERVICE_URL, env.REALTIME_INTERNAL_KEY)
+      ? new HttpRealtimeAdapter(
+          env.REALTIME_SERVICE_URL,
+          env.REALTIME_INTERNAL_KEY,
+        )
       : new InMemoryRealtimeAdapter();
 
   registerRealtimeHandler(eventBus, realtimeAdapter);
 
-  const orderService = new OrderService(db, eventBus);
-  const dispatchService = new DispatchService(db, eventBus, env);
+  const orderService = new OrderService(typedDb, eventBus);
+  const dispatchService = new DispatchService(typedDb, eventBus, env);
   const controller = new OrderController(orderService, dispatchService);
 
-  await registerRoutes(app, controller, db, env.PAYMENT_SERVICE_INTERNAL_KEY);
+  await registerRoutes(
+    app,
+    controller,
+    typedDb,
+    env.PAYMENT_SERVICE_INTERNAL_KEY,
+    env.DISPATCH_SERVICE_INTERNAL_KEY,
+  );
 
   return app;
 }

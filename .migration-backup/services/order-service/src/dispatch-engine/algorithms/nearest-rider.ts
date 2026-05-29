@@ -16,7 +16,10 @@ export class NearestRiderAlgorithm implements IDispatchAlgorithm {
   ): Promise<RiderCandidate | null> {
     const eligible = candidates.filter((r) => {
       if (r.totalActiveOrders >= this.MAX_ACTIVE_ORDERS) return false;
-      if (r.averageRating !== null && r.averageRating < this.MIN_RATING_THRESHOLD)
+      if (
+        r.averageRating !== null &&
+        r.averageRating < this.MIN_RATING_THRESHOLD
+      )
         return false;
       return true;
     });

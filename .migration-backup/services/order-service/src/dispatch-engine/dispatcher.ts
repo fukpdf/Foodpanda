@@ -1,6 +1,6 @@
-import type { Database } from "@deliveryos/database";
-import { riders, dispatchAssignments } from "@deliveryos/database";
-import { and, eq, isNull } from "@deliveryos/database/drizzle";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { riders, dispatchAssignments } from "@workspace/db";
+import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type {
   IDispatchAlgorithm,
@@ -17,7 +17,13 @@ import {
   estimateDeliverySeconds,
 } from "../utils/geo.js";
 import type { EventBus } from "../events/event-bus.js";
-import type { DispatchInitiatedEvent, DispatchRiderAssignedEvent, DispatchFailedEvent } from "../types/event.types.js";
+import type {
+  DispatchInitiatedEvent,
+  DispatchRiderAssignedEvent,
+  DispatchFailedEvent,
+} from "../types/event.types.js";
+
+type Database = NodePgDatabase<Record<string, unknown>>;
 
 export class DispatchEngine {
   private readonly algorithm: IDispatchAlgorithm;
@@ -164,7 +170,10 @@ export class DispatchEngine {
     const candidates: RiderCandidate[] = [];
 
     for (const rider of allOnlineRiders) {
-      if (rider.currentLatitude === null || rider.currentLongitude === null) {
+      if (
+        rider.currentLatitude === null ||
+        rider.currentLongitude === null
+      ) {
         continue;
       }
 

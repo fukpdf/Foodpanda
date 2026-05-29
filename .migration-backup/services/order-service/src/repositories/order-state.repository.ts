@@ -1,7 +1,9 @@
-import type { Database } from "@deliveryos/database";
-import { orderStateHistory } from "@deliveryos/database";
-import type { OrderStateHistory } from "@deliveryos/database";
-import { and, desc, eq } from "@deliveryos/database/drizzle";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { orderStateHistory } from "@workspace/db";
+import type { OrderStateHistory } from "@workspace/db";
+import { and, desc, eq } from "drizzle-orm";
+
+type Database = NodePgDatabase<Record<string, unknown>>;
 
 export class OrderStateRepository {
   constructor(private readonly db: Database) {}
@@ -39,11 +41,7 @@ export class OrderStateRepository {
     return (await this.db
       .select()
       .from(orderStateHistory)
-      .where(
-        and(
-          eq(orderStateHistory.actorId, actorId),
-        ),
-      )
+      .where(and(eq(orderStateHistory.actorId, actorId)))
       .orderBy(desc(orderStateHistory.transitionedAt))
       .limit(limit)) as OrderStateHistory[];
   }

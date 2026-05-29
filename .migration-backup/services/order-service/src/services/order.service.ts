@@ -1,38 +1,35 @@
 import { randomUUID } from "node:crypto";
-import type { Database } from "@deliveryos/database";
-import type { OrderFoundation } from "@deliveryos/database";
-import type { CreateOrderInput as CreateOrderInputType, OrderWithItems, OrderFilters, TransitionOrderInput, CancelOrderInput } from "../types/order.types.js";
-import { DB_STATUS_TO_STATE, ORDER_STATE_TO_DB } from "../types/order.types.js";
-import { OrderRepository } from "../repositories/order.repository.js";
-import { OrderStateRepository } from "../repositories/order-state.repository.js";
-import { DispatchRepository } from "../repositories/dispatch.repository.js";
-import { OrderStateMachine } from "../state-machine/engine.js";
-import { validateCancellation, validateTransition } from "../state-machine/transitions.js";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { ordersFoundation } from "@workspace/db";
+import type { OrderFoundation } from "@workspace/db";
+import { eq } from "drizzle-orm";
+
 import type { EventBus } from "../events/event-bus.js";
+import {
+  OrderRepository,
+  type OrderWithItems,
+} from "../repositories/order.repository.js";
+import { OrderStateRepository } from "../repositories/order-state.repository.js";
+import { OrderStateMachine } from "../state-machine/engine.js";
+import {
+  validateCancellation,
+  type TransitionContext,
+} from "../state-machine/transitions.js";
+import type {
+  CreateOrderInput,
+  OrderState,
+  PaginatedResult,
+  OrderFilters,
+  CancellationActor,
+} from "../types/order.types.js";
+import { DB_STATUS_TO_STATE, ORDER_STATE_TO_DB } from "../types/order.types.js";
 import type { OrderCreatedEvent, OrderCancelledEvent } from "../types/event.types.js";
 
-export class OrderNotFoundError extends Error {
-  readonly code = "ORDER_NOT_FOUND";
-  readonly statusCode = 404;
-  constructor(orderId: string) {
-    super(`Order ${orderId} not found`);
-    this.name = "OrderNotFoundError";
-  }
-}
-
-export class OrderAccessDeniedError extends Error {
-  readonly code = "FORBIDDEN";
-  readonly statusCode = 403;
-  constructor(orderId: string) {
-    super(`Access denied to order ${orderId}`);
-    this.name = "OrderAccessDeniedError";
-  }
-}
+type Database = NodePgDatabase<Record<string, unknown>>;
 
 export class OrderService {
   private readonly orderRepo: OrderRepository;
   private readonly stateRepo: OrderStateRepository;
-  private readonly dispatchRepo: DispatchRepository;
   private readonly stateMachine: OrderStateMachine;
 
   constructor(
@@ -41,20 +38,27 @@ export class OrderService {
   ) {
     this.orderRepo = new OrderRepository(db);
     this.stateRepo = new OrderStateRepository(db);
-    this.dispatchRepo = new DispatchRepository(db);
     this.stateMachine = new OrderStateMachine(db, eventBus);
   }
 
   async createOrder(
-    input: CreateOrderInputType,
     customerId: string,
+    input: CreateOrderInput,
   ): Promise<OrderFoundation> {
-    const order = await this.orderRepo.create({
-      ...input,
-      customerId,
-    } as Parameters<typeof this.orderRepo.create>[0]);
+    const order = await this.orderRepo.create({ ...input, customerId });
 
-    const createdEvent: OrderCreatedEvent = {
+    await this.stateMachine.transition({
+      orderId: order.id,
+      fromState: "CREATED",
+      toState: "PAYMENT_PENDING",
+      actorId: customerId,
+      actorRole: "customer",
+      reason: "Order placed",
+    });
+
+    const freshOrder = await this.orderRepo.findById(order.id);
+
+    const event: OrderCreatedEvent = {
       eventId: randomUUID(),
       eventType: "order.created",
       orderId: order.id,
@@ -63,149 +67,139 @@ export class OrderService {
       source: "order-service",
       payload: {
         customerId,
-        vendorBranchId: order.vendorBranchId,
+        vendorBranchId: input.vendorBranchId,
         orderNumber: order.orderNumber,
         totalCents: order.totalCents,
         itemCount: input.items.length,
       },
     };
-    this.eventBus.emit(createdEvent);
+    this.eventBus.emit(event);
 
-    await this.stateMachine.transition({
-      orderId: order.id,
-      fromState: "CREATED",
-      toState: "PAYMENT_PENDING",
-      actorId: customerId,
-      actorRole: "customer",
-      note: "Order submitted — awaiting payment",
-    });
-
-    return (await this.orderRepo.findById(order.id))!;
+    return freshOrder ?? order;
   }
 
-  async getOrder(
+  async getOrder(orderId: string): Promise<OrderWithItems | null> {
+    return this.orderRepo.findWithDetails(orderId);
+  }
+
+  async getOrderById(orderId: string): Promise<OrderFoundation | null> {
+    return this.orderRepo.findById(orderId);
+  }
+
+  async transitionOrder(
     orderId: string,
-    requesterId?: string,
-    requesterRole?: string,
+    toState: OrderState,
+    actorId?: string,
+    actorRole?: string,
+    reason?: string,
+    note?: string,
   ): Promise<OrderWithItems> {
-    const result = await this.orderRepo.findWithDetails(orderId);
-    if (!result) throw new OrderNotFoundError(orderId);
-
-    if (
-      requesterId &&
-      requesterRole === "customer" &&
-      result.order.customerId !== requesterId
-    ) {
-      throw new OrderAccessDeniedError(orderId);
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) {
+      const err = new Error(`Order ${orderId} not found`) as Error & {
+        statusCode: number;
+        code: string;
+      };
+      err.statusCode = 404;
+      err.code = "ORDER_NOT_FOUND";
+      throw err;
     }
 
-    return result;
-  }
-
-  async getOrdersByCustomer(
-    customerId: string,
-    filters: OrderFilters = {},
-  ): Promise<import("@deliveryos/database").PaginatedResult<OrderFoundation>> {
-    return this.orderRepo.findByCustomer(customerId, filters);
-  }
-
-  async getOrdersByVendor(
-    vendorBranchId: string,
-    filters: OrderFilters = {},
-  ): Promise<import("@deliveryos/database").PaginatedResult<OrderFoundation>> {
-    return this.orderRepo.findByVendorBranch(vendorBranchId, filters);
-  }
-
-  async getOrdersByRider(
-    riderId: string,
-    filters: OrderFilters = {},
-  ): Promise<import("@deliveryos/database").PaginatedResult<OrderFoundation>> {
-    return this.orderRepo.findByRider(riderId, filters);
-  }
-
-  async transitionOrder(input: TransitionOrderInput): Promise<OrderWithItems> {
-    const existing = await this.orderRepo.findById(input.orderId);
-    if (!existing) throw new OrderNotFoundError(input.orderId);
-
-    const fromState = DB_STATUS_TO_STATE[existing.status];
+    const fromState = DB_STATUS_TO_STATE[order.status as keyof typeof DB_STATUS_TO_STATE];
     if (!fromState) {
-      throw new Error(`Order ${input.orderId} has unrecognized status: ${existing.status}`);
+      const err = new Error(
+        `Order ${orderId} has unrecognised status: ${order.status}`,
+      ) as Error & { statusCode: number; code: string };
+      err.statusCode = 409;
+      err.code = "INVALID_ORDER_STATE";
+      throw err;
     }
 
-    validateTransition({
-      orderId: input.orderId,
+    const ctx: TransitionContext = {
+      orderId,
       fromState,
-      toState: input.toState,
-      actorId: input.actorId,
-      actorRole: input.actorRole,
-      reason: input.reason,
-      note: input.note,
-    });
+      toState,
+      actorId,
+      actorRole,
+      reason,
+      note,
+    };
 
-    await this.stateMachine.transition({
-      orderId: input.orderId,
-      fromState,
-      toState: input.toState,
-      actorId: input.actorId,
-      actorRole: input.actorRole,
-      reason: input.reason,
-      note: input.note,
-      metadata: input.metadata,
-    });
+    try {
+      await this.stateMachine.transition(ctx);
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      const httpErr = new Error(err.message) as Error & {
+        statusCode: number;
+        code: string;
+      };
+      httpErr.statusCode = 409;
+      httpErr.code = err.code ?? "INVALID_STATE_TRANSITION";
+      throw httpErr;
+    }
 
-    return (await this.orderRepo.findWithDetails(input.orderId))!;
+    const updated = await this.orderRepo.findWithDetails(orderId);
+    if (!updated) throw new Error(`Order ${orderId} not found after transition`);
+    return updated;
   }
 
-  async cancelOrder(input: CancelOrderInput): Promise<OrderWithItems> {
-    const existing = await this.orderRepo.findById(input.orderId);
-    if (!existing) throw new OrderNotFoundError(input.orderId);
-
-    const currentState = DB_STATUS_TO_STATE[existing.status];
-    if (!currentState) {
-      throw new Error(`Order ${input.orderId} has unrecognized status`);
+  async cancelOrder(
+    orderId: string,
+    actorId: string,
+    actorRole: CancellationActor,
+    reason: string,
+  ): Promise<OrderWithItems> {
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) {
+      const err = new Error(`Order ${orderId} not found`) as Error & {
+        statusCode: number;
+        code: string;
+      };
+      err.statusCode = 404;
+      err.code = "ORDER_NOT_FOUND";
+      throw err;
     }
 
-    validateCancellation({
-      orderId: input.orderId,
-      currentState,
-      actorId: input.actorId,
-      actorRole: input.actorRole,
-      reason: input.reason,
-    });
+    const currentState = DB_STATUS_TO_STATE[order.status as keyof typeof DB_STATUS_TO_STATE];
+    if (!currentState) {
+      const err = new Error(
+        `Order ${orderId} has unrecognised status: ${order.status}`,
+      ) as Error & { statusCode: number; code: string };
+      err.statusCode = 409;
+      err.code = "INVALID_ORDER_STATE";
+      throw err;
+    }
+
+    validateCancellation({ orderId, currentState, actorId, actorRole, reason });
 
     await this.stateMachine.transition({
-      orderId: input.orderId,
+      orderId,
       fromState: currentState,
       toState: "CANCELLED",
-      actorId: input.actorId,
-      actorRole: input.actorRole,
-      reason: input.reason,
+      actorId,
+      actorRole,
+      reason,
     });
 
-    const cancelledEvent: OrderCancelledEvent = {
+    const event: OrderCancelledEvent = {
       eventId: randomUUID(),
       eventType: "order.cancelled",
-      orderId: input.orderId,
+      orderId,
       occurredAt: new Date().toISOString(),
       version: 1,
       source: "order-service",
       payload: {
-        cancelledById: input.actorId,
-        cancellationReason: input.reason,
-        actorRole: input.actorRole,
+        cancelledById: actorId,
+        cancellationReason: reason,
+        actorRole,
         previousState: currentState,
       },
     };
-    this.eventBus.emit(cancelledEvent);
+    this.eventBus.emit(event);
 
-    const activeDispatch = await this.dispatchRepo.findActivePendingForOrder(input.orderId);
-    if (activeDispatch) {
-      await this.dispatchRepo.updateStatus(activeDispatch.id, "cancelled", {
-        respondedAt: new Date(),
-      });
-    }
-
-    return (await this.orderRepo.findWithDetails(input.orderId))!;
+    const updated = await this.orderRepo.findWithDetails(orderId);
+    if (!updated) throw new Error(`Order ${orderId} not found after cancellation`);
+    return updated;
   }
 
   async assignRider(
@@ -213,19 +207,76 @@ export class OrderService {
     riderId: string,
     estimatedDeliveryAt?: Date,
   ): Promise<void> {
-    const existing = await this.orderRepo.findById(orderId);
-    if (!existing) throw new OrderNotFoundError(orderId);
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) throw new Error(`Order ${orderId} not found`);
+
+    const fromState =
+      DB_STATUS_TO_STATE[order.status as keyof typeof DB_STATUS_TO_STATE] ??
+      "READY_FOR_PICKUP";
 
     await this.orderRepo.assignRider(orderId, riderId, estimatedDeliveryAt);
 
-    const fromState = DB_STATUS_TO_STATE[existing.status] ?? "READY_FOR_PICKUP";
     await this.stateMachine.transition({
       orderId,
       fromState,
       toState: "RIDER_ASSIGNED",
       actorId: riderId,
       actorRole: "system",
-      note: `Rider ${riderId} assigned via dispatch engine`,
+      reason: "Rider assigned by dispatch engine",
     });
+  }
+
+  async getOrdersByCustomer(
+    customerId: string,
+    filters: OrderFilters,
+  ): Promise<PaginatedResult<OrderFoundation>> {
+    return this.orderRepo.findByCustomer(customerId, filters);
+  }
+
+  async getOrdersByVendorBranch(
+    vendorBranchId: string,
+    filters: OrderFilters,
+  ): Promise<PaginatedResult<OrderFoundation>> {
+    return this.orderRepo.findByVendorBranch(vendorBranchId, filters);
+  }
+
+  async getOrdersByRider(
+    riderId: string,
+    filters: OrderFilters,
+  ): Promise<PaginatedResult<OrderFoundation>> {
+    return this.orderRepo.findByRider(riderId, filters);
+  }
+
+  async getOrderHistory(orderId: string) {
+    return this.stateRepo.findByOrder(orderId);
+  }
+
+  async setPaymentConfirmed(
+    orderId: string,
+    paymentReference: string,
+  ): Promise<void> {
+    await this.db
+      .update(ordersFoundation)
+      .set({
+        paymentStatus: "paid",
+        paymentReference,
+        paymentMethod: "card",
+        updatedAt: new Date(),
+      })
+      .where(eq(ordersFoundation.id, orderId));
+  }
+
+  async setPaymentFailed(orderId: string): Promise<void> {
+    await this.db
+      .update(ordersFoundation)
+      .set({
+        paymentStatus: "failed",
+        updatedAt: new Date(),
+      })
+      .where(eq(ordersFoundation.id, orderId));
+  }
+
+  resolveMachineState(dbStatus: string): OrderState | null {
+    return DB_STATUS_TO_STATE[dbStatus as keyof typeof DB_STATUS_TO_STATE] ?? null;
   }
 }

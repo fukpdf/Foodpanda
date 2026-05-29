@@ -1,9 +1,12 @@
-import type { Database } from "@deliveryos/database";
-import { auditLogs } from "@deliveryos/database";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { auditLogs } from "@workspace/db";
 import type { EventBus } from "../event-bus.js";
 import type { OrderEvent } from "../../types/event.types.js";
 
-export function registerAuditHandler(db: Database, bus: EventBus): void {
+export function registerAuditHandler(
+  db: NodePgDatabase<Record<string, unknown>>,
+  bus: EventBus,
+): void {
   bus.subscribeAll(async (event: OrderEvent) => {
     try {
       const actorId =

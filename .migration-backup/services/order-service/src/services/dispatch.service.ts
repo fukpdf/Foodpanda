@@ -1,6 +1,6 @@
-import type { Database } from "@deliveryos/database";
-import { vendorBranches } from "@deliveryos/database";
-import { eq } from "@deliveryos/database/drizzle";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { vendorBranches } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import type { EventBus } from "../events/event-bus.js";
 import { DispatchEngine } from "../dispatch-engine/dispatcher.js";
 import { OrderService } from "./order.service.js";
@@ -8,6 +8,8 @@ import { DispatchRepository } from "../repositories/dispatch.repository.js";
 import { OrderRepository } from "../repositories/order.repository.js";
 import type { DispatchConfig } from "../types/dispatch.types.js";
 import type { ResolvedOrderEnv } from "../config/env.js";
+
+type Database = NodePgDatabase<Record<string, unknown>>;
 
 export class DispatchService {
   private readonly engine: DispatchEngine;
@@ -43,7 +45,8 @@ export class DispatchService {
     const order = await this.orderRepo.findById(orderId);
     if (!order) throw new Error(`Order ${orderId} not found`);
 
-    const attemptNumber = (await this.dispatchRepo.countAttemptsForOrder(orderId)) + 1;
+    const attemptNumber =
+      (await this.dispatchRepo.countAttemptsForOrder(orderId)) + 1;
 
     const branch = await this.db
       .select()

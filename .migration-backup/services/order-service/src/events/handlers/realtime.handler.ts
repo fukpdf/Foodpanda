@@ -44,6 +44,7 @@ export class HttpRealtimeAdapter implements RealtimeAdapter {
         signal: AbortSignal.timeout(5_000),
       });
     } catch {
+      // Realtime failures must never crash the order flow
     }
   }
 }

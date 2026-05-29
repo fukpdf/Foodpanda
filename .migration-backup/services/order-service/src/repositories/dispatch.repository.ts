@@ -1,7 +1,9 @@
-import type { Database } from "@deliveryos/database";
-import { dispatchAssignments } from "@deliveryos/database";
-import type { DispatchAssignment } from "@deliveryos/database";
-import { and, desc, eq } from "@deliveryos/database/drizzle";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { dispatchAssignments } from "@workspace/db";
+import type { DispatchAssignment } from "@workspace/db";
+import { and, desc, eq } from "drizzle-orm";
+
+type Database = NodePgDatabase<Record<string, unknown>>;
 
 export class DispatchRepository {
   constructor(private readonly db: Database) {}

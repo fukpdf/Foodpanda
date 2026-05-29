@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { Database } from "@deliveryos/database";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   ordersFoundation,
   orderStateHistory,
-} from "@deliveryos/database";
-import { eq } from "@deliveryos/database/drizzle";
+} from "@workspace/db";
+import { eq } from "drizzle-orm";
 import type { TransitionContext } from "./transitions.js";
 import { validateTransition } from "./transitions.js";
 import type { OrderState, DBOrderStatus } from "../types/order.types.js";
@@ -14,6 +14,8 @@ import {
 } from "../types/order.types.js";
 import type { EventBus } from "../events/event-bus.js";
 import type { OrderStateChangedEvent } from "../types/event.types.js";
+
+export type Database = NodePgDatabase<Record<string, unknown>>;
 
 export interface StateMachineResult {
   orderId: string;
@@ -42,6 +44,10 @@ export class OrderStateMachine {
 
     if (ctx.toState === "ACCEPTED_BY_VENDOR") {
       timestampUpdates.acceptedAt = new Date();
+    } else if (ctx.toState === "PREPARING") {
+      timestampUpdates.preparedAt = undefined;
+    } else if (ctx.toState === "READY_FOR_PICKUP") {
+      timestampUpdates.preparedAt = new Date();
     } else if (ctx.toState === "PICKED_UP") {
       timestampUpdates.pickedUpAt = new Date();
     } else if (ctx.toState === "DELIVERED") {
@@ -50,10 +56,6 @@ export class OrderStateMachine {
       timestampUpdates.cancelledAt = new Date();
       if (ctx.reason) timestampUpdates.cancellationReason = ctx.reason;
       if (ctx.actorId) timestampUpdates.cancelledById = ctx.actorId;
-    } else if (ctx.toState === "PREPARING") {
-      timestampUpdates.preparedAt = undefined;
-    } else if (ctx.toState === "READY_FOR_PICKUP") {
-      timestampUpdates.preparedAt = new Date();
     }
 
     const historyId = randomUUID();

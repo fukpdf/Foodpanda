@@ -6,64 +6,59 @@ export async function registerOrderRoutes(
   app: FastifyInstance,
   controller: OrderController,
 ): Promise<void> {
-  // POST /orders — Create a new order (customer only)
+  // Customer: create an order
   app.post(
     "/orders",
     { preHandler: [authenticate, requireRole("customer")] },
-    controller.createOrder as any,
+    (req, reply) => controller.createOrder(req, reply),
   );
 
-  // GET /orders/user/:userId — before /orders/:id to avoid param collision
+  // Customer: list own orders
   app.get(
-    "/orders/user/:userId",
-    { preHandler: [authenticate] },
-    controller.getOrdersByUser as any,
+    "/orders/me",
+    { preHandler: [authenticate, requireRole("customer")] },
+    (req, reply) => controller.getMyOrders(req, reply),
   );
 
-  // GET /orders/vendor/:vendorId
+  // Rider: list own assigned orders
   app.get(
-    "/orders/vendor/:vendorId",
+    "/orders/rider/me",
+    { preHandler: [authenticate, requireRole("rider")] },
+    (req, reply) => controller.getRiderOrders(req, reply),
+  );
+
+  // Vendor: list orders for a specific branch
+  app.get(
+    "/orders/vendor/branch/:branchId",
     {
       preHandler: [
         authenticate,
         requireRole("vendor", "admin", "superadmin"),
       ],
     },
-    controller.getVendorOrders as any,
+    (req, reply) => controller.getVendorBranchOrders(req, reply),
   );
 
-  // GET /orders/rider/:riderId
-  app.get(
-    "/orders/rider/:riderId",
-    {
-      preHandler: [
-        authenticate,
-        requireRole("rider", "admin", "superadmin"),
-      ],
-    },
-    controller.getRiderOrders as any,
-  );
-
-  // GET /orders/:id — after static segments
+  // Any authenticated: get a single order by ID
   app.get(
     "/orders/:id",
     { preHandler: [authenticate] },
-    controller.getOrder as any,
+    (req, reply) => controller.getOrder(req, reply),
   );
 
-  // PATCH /orders/:id/state
+  // State transition (vendor, rider, admin)
   app.patch(
     "/orders/:id/state",
     {
       preHandler: [
         authenticate,
-        requireRole("customer", "vendor", "rider", "admin", "superadmin"),
+        requireRole("vendor", "rider", "admin", "superadmin"),
       ],
     },
-    controller.transitionOrder as any,
+    (req, reply) => controller.transitionOrder(req, reply),
   );
 
-  // POST /orders/:id/cancel
+  // Cancel (customer, vendor, admin)
   app.post(
     "/orders/:id/cancel",
     {
@@ -72,15 +67,13 @@ export async function registerOrderRoutes(
         requireRole("customer", "vendor", "admin", "superadmin"),
       ],
     },
-    controller.cancelOrder as any,
+    (req, reply) => controller.cancelOrder(req, reply),
   );
 
-  // POST /orders/:id/dispatch — admin-triggered dispatch
-  app.post(
-    "/orders/:id/dispatch",
-    {
-      preHandler: [authenticate, requireRole("admin", "superadmin")],
-    },
-    controller.initiateDispatch as any,
+  // State history
+  app.get(
+    "/orders/:id/history",
+    { preHandler: [authenticate] },
+    (req, reply) => controller.getOrderHistory(req, reply),
   );
 }

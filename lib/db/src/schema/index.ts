@@ -1,28 +1,20 @@
-export * from "./enums.js";
-export * from "./users.js";
-export * from "./user-profiles.js";
-export * from "./auth-sessions.js";
-export * from "./refresh-tokens.js";
-export * from "./roles.js";
-export * from "./permissions.js";
-export * from "./vendors.js";
-export * from "./vendor-branches.js";
-export * from "./riders.js";
-export * from "./customer-addresses.js";
-export * from "./orders.js";
-export * from "./order-items.js";
-export * from "./order-state-history.js";
-export * from "./dispatch-assignments.js";
-export * from "./dispatches.js";
-export * from "./dispatch-events.js";
-export * from "./assignment-attempts.js";
-export * from "./rider-locations.js";
-export * from "./delivery-proofs.js";
-export * from "./audit-logs.js";
-export * from "./payments.js";
-export * from "./payment-attempts.js";
-export * from "./payment-events.js";
-export * from "./refunds.js";
-export * from "./webhook-events.js";
-export * from "./idempotency-keys.js";
-export * from "./relations.js";
+// Export your models here. Add one export per file
+// export * from "./posts";
+//
+// Each model/table should ideally be split into different files.
+// Each model/table should define a Drizzle table, insert schema, and types:
+//
+//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
+//   import { createInsertSchema } from "drizzle-zod";
+//   import { z } from "zod/v4";
+//
+//   export const postsTable = pgTable("posts", {
+//     id: serial("id").primaryKey(),
+//     title: text("title").notNull(),
+//   });
+//
+//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
+//   export type InsertPost = z.infer<typeof insertPostSchema>;
+//   export type Post = typeof postsTable.$inferSelect;
+
+export {}

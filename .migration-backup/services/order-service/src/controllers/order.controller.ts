@@ -2,13 +2,14 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import type { OrderService } from "../services/order.service.js";
 import type { DispatchService } from "../services/dispatch.service.js";
 import {
-  validateBody,
-  validateQuery,
   createOrderSchema,
   transitionOrderSchema,
   cancelOrderSchema,
   paginationSchema,
+  validateBody,
+  validateQuery,
 } from "../validators/order.validators.js";
+import type { CancellationActor } from "../types/order.types.js";
 import { ok, fail } from "../utils/response.js";
 
 export class OrderController {
@@ -17,157 +18,198 @@ export class OrderController {
     private readonly dispatchService: DispatchService,
   ) {}
 
-  createOrder = async (
+  async createOrder(
     request: FastifyRequest,
     reply: FastifyReply,
-  ): Promise<void> => {
-    const customerId = request.user!.userId;
+  ): Promise<void> {
+    const user = request.user!;
     const body = validateBody(createOrderSchema, request.body);
 
-    const order = await this.orderService.createOrder(body, customerId);
+    const order = await this.orderService.createOrder(user.userId, body);
 
-    return reply.status(201).send(ok(order));
-  };
+    return reply.status(201).send({
+      ...ok(order),
+      timestamp: new Date().toISOString(),
+    });
+  }
 
-  getOrder = async (
-    request: FastifyRequest<{ Params: { id: string } }>,
+  async getOrder(
+    request: FastifyRequest,
     reply: FastifyReply,
-  ): Promise<void> => {
-    const { id } = request.params;
-    const requesterId = request.user?.userId;
-    const requesterRole = request.user?.role;
+  ): Promise<void> {
+    const { id } = request.params as { id: string };
 
-    const result = await this.orderService.getOrder(id, requesterId, requesterRole);
-
-    return reply.status(200).send(ok(result));
-  };
-
-  getOrdersByUser = async (
-    request: FastifyRequest<{
-      Params: { userId: string };
-      Querystring: Record<string, unknown>;
-    }>,
-    reply: FastifyReply,
-  ): Promise<void> => {
-    const { userId } = request.params;
-    const query = validateQuery(paginationSchema, request.query);
-
-    if (
-      request.user?.role === "customer" &&
-      request.user.userId !== userId
-    ) {
-      return reply.status(403).send(
-        fail("FORBIDDEN", "Cannot access other users' orders"),
-      );
+    const result = await this.orderService.getOrder(id);
+    if (!result) {
+      return reply.status(404).send({
+        ...fail("NOT_FOUND", `Order ${id} not found`),
+        timestamp: new Date().toISOString(),
+      });
     }
 
-    const result = await this.orderService.getOrdersByCustomer(userId, query);
+    const user = request.user!;
+    if (
+      user.role === "customer" &&
+      result.order.customerId !== user.userId
+    ) {
+      return reply.status(403).send({
+        ...fail("FORBIDDEN", "You do not have access to this order"),
+        timestamp: new Date().toISOString(),
+      });
+    }
 
-    return reply.status(200).send(ok(result.data, { pagination: result }));
-  };
+    return reply.status(200).send({
+      ...ok(result),
+      timestamp: new Date().toISOString(),
+    });
+  }
 
-  transitionOrder = async (
-    request: FastifyRequest<{ Params: { id: string } }>,
+  async transitionOrder(
+    request: FastifyRequest,
     reply: FastifyReply,
-  ): Promise<void> => {
-    const { id } = request.params;
+  ): Promise<void> {
+    const { id } = request.params as { id: string };
+    const user = request.user!;
     const body = validateBody(transitionOrderSchema, request.body);
 
-    const result = await this.orderService.transitionOrder({
-      orderId: id,
-      toState: body.toState,
-      actorId: request.user?.userId,
-      actorRole: request.user?.role,
-      reason: body.reason,
-      note: body.note,
-      metadata: body.metadata,
-    });
+    const result = await this.orderService.transitionOrder(
+      id,
+      body.toState,
+      user.userId,
+      user.role,
+      body.reason,
+      body.note,
+    );
 
-    if (
-      result.order.status === "ready_for_pickup" &&
-      body.toState === "RIDER_ASSIGNED"
-    ) {
-      await this.dispatchService.initiateDispatch(id).catch(() => {});
+    // Phase 7 dispatch gate: fire-and-forget dispatch initiation
+    // when transitioning to DISPATCH_CREATED.
+    // The state machine already enforces that DISPATCH_CREATED
+    // is only reachable from READY_FOR_PICKUP.
+    if (body.toState === "DISPATCH_CREATED") {
+      await this.dispatchService.initiateDispatch(id).catch((err) => {
+        request.log.error(
+          { err, orderId: id },
+          "dispatch.initiateDispatch failed (non-fatal)",
+        );
+      });
     }
 
-    return reply.status(200).send(ok(result));
-  };
+    return reply.status(200).send({
+      ...ok(result),
+      timestamp: new Date().toISOString(),
+    });
+  }
 
-  cancelOrder = async (
-    request: FastifyRequest<{ Params: { id: string } }>,
+  async cancelOrder(
+    request: FastifyRequest,
     reply: FastifyReply,
-  ): Promise<void> => {
-    const { id } = request.params;
+  ): Promise<void> {
+    const { id } = request.params as { id: string };
+    const user = request.user!;
     const body = validateBody(cancelOrderSchema, request.body);
 
-    const actorRole = request.user?.role ?? "customer";
+    const result = await this.orderService.cancelOrder(
+      id,
+      user.userId,
+      user.role as CancellationActor,
+      body.reason,
+    );
 
-    const result = await this.orderService.cancelOrder({
-      orderId: id,
-      actorId: request.user!.userId,
-      actorRole: actorRole as "customer" | "vendor" | "rider" | "system" | "admin",
-      reason: body.reason,
+    return reply.status(200).send({
+      ...ok(result),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  async getMyOrders(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
+    const user = request.user!;
+    const query = validateQuery(paginationSchema, request.query);
+
+    const result = await this.orderService.getOrdersByCustomer(user.userId, {
+      page: query.page,
+      limit: query.limit,
+      status: query.status,
     });
 
-    return reply.status(200).send(ok(result));
-  };
+    return reply.status(200).send({
+      ...ok(result.data, {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages: result.totalPages,
+        hasNextPage: result.hasNextPage,
+        hasPreviousPage: result.hasPreviousPage,
+      }),
+      timestamp: new Date().toISOString(),
+    });
+  }
 
-  getVendorOrders = async (
-    request: FastifyRequest<{
-      Params: { vendorId: string };
-      Querystring: Record<string, unknown>;
-    }>,
+  async getVendorBranchOrders(
+    request: FastifyRequest,
     reply: FastifyReply,
-  ): Promise<void> => {
-    const { vendorId } = request.params;
+  ): Promise<void> {
+    const { branchId } = request.params as { branchId: string };
     const query = validateQuery(paginationSchema, request.query);
 
-    const result = await this.orderService.getOrdersByVendor(vendorId, query);
+    const result = await this.orderService.getOrdersByVendorBranch(branchId, {
+      page: query.page,
+      limit: query.limit,
+      status: query.status,
+    });
 
-    return reply.status(200).send(ok(result.data, { pagination: result }));
-  };
+    return reply.status(200).send({
+      ...ok(result.data, {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages: result.totalPages,
+        hasNextPage: result.hasNextPage,
+        hasPreviousPage: result.hasPreviousPage,
+      }),
+      timestamp: new Date().toISOString(),
+    });
+  }
 
-  getRiderOrders = async (
-    request: FastifyRequest<{
-      Params: { riderId: string };
-      Querystring: Record<string, unknown>;
-    }>,
+  async getRiderOrders(
+    request: FastifyRequest,
     reply: FastifyReply,
-  ): Promise<void> => {
-    const { riderId } = request.params;
+  ): Promise<void> {
+    const user = request.user!;
     const query = validateQuery(paginationSchema, request.query);
 
-    if (
-      request.user?.role === "rider" &&
-      request.user.userId !== riderId
-    ) {
-      return reply.status(403).send(
-        fail("FORBIDDEN", "Riders can only view their own assigned orders"),
-      );
-    }
+    const result = await this.orderService.getOrdersByRider(user.userId, {
+      page: query.page,
+      limit: query.limit,
+      status: query.status,
+    });
 
-    const result = await this.orderService.getOrdersByRider(riderId, query);
+    return reply.status(200).send({
+      ...ok(result.data, {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages: result.totalPages,
+        hasNextPage: result.hasNextPage,
+        hasPreviousPage: result.hasPreviousPage,
+      }),
+      timestamp: new Date().toISOString(),
+    });
+  }
 
-    return reply.status(200).send(ok(result.data, { pagination: result }));
-  };
-
-  initiateDispatch = async (
-    request: FastifyRequest<{ Params: { id: string } }>,
+  async getOrderHistory(
+    request: FastifyRequest,
     reply: FastifyReply,
-  ): Promise<void> => {
-    const { id } = request.params;
+  ): Promise<void> {
+    const { id } = request.params as { id: string };
 
-    const dispatched = await this.dispatchService.initiateDispatch(id);
+    const history = await this.orderService.getOrderHistory(id);
 
-    if (!dispatched) {
-      return reply.status(503).send(
-        fail(
-          "DISPATCH_FAILED",
-          "No available riders found. Dispatch will retry automatically.",
-        ),
-      );
-    }
-
-    return reply.status(200).send(ok({ dispatched: true, orderId: id }));
-  };
+    return reply.status(200).send({
+      ...ok(history),
+      timestamp: new Date().toISOString(),
+    });
+  }
 }

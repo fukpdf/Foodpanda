@@ -1,26 +1,33 @@
 import { randomUUID } from "node:crypto";
-import type { Database } from "@deliveryos/database";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   ordersFoundation,
   orderItems,
   orderStateHistory,
   dispatchAssignments,
-} from "@deliveryos/database";
+} from "@workspace/db";
 import type {
   OrderFoundation,
   OrderItem,
   OrderStateHistory,
   DispatchAssignment,
-} from "@deliveryos/database";
-import { and, desc, eq, lt } from "@deliveryos/database/drizzle";
+} from "@workspace/db";
+import { and, desc, eq, lt } from "drizzle-orm";
 
 import type {
   CreateOrderInput,
-  OrderWithItems,
+  PaginatedResult,
   OrderFilters,
 } from "../types/order.types.js";
 
-import type { PaginatedResult } from "@deliveryos/database";
+type Database = NodePgDatabase<Record<string, unknown>>;
+
+export interface OrderWithItems {
+  order: OrderFoundation;
+  items: OrderItem[];
+  stateHistory: OrderStateHistory[];
+  activeDispatch: DispatchAssignment | null;
+}
 
 interface CreateOrderRepositoryInput extends CreateOrderInput {
   customerId: string;
@@ -40,7 +47,10 @@ export class OrderRepository {
       (sum, item) =>
         sum +
         item.unitPriceCents * item.quantity +
-        (item.modifiers?.reduce((ms, m) => ms + m.priceCents * (m.quantity ?? 1), 0) ?? 0),
+        (item.modifiers?.reduce(
+          (ms, m) => ms + m.priceCents * (m.quantity ?? 1),
+          0,
+        ) ?? 0),
       0,
     );
 
@@ -108,7 +118,7 @@ export class OrderRepository {
       .from(ordersFoundation)
       .where(eq(ordersFoundation.id, id))
       .limit(1);
-    return result[0] ?? null;
+    return (result[0] as OrderFoundation) ?? null;
   }
 
   async findWithDetails(id: string): Promise<OrderWithItems | null> {
@@ -211,9 +221,7 @@ export class OrderRepository {
     const { page = 1, limit = 20, status } = filters;
     const offset = (page - 1) * limit;
 
-    const conditions = [
-      eq(ordersFoundation.riderId, riderId),
-    ];
+    const conditions = [eq(ordersFoundation.riderId, riderId)];
     if (status) conditions.push(eq(ordersFoundation.status, status));
 
     const rows = (await this.db
