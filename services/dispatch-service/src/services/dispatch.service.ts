@@ -1,5 +1,5 @@
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { vendorBranches, ordersFoundation } from "@workspace/db";
+import { vendorBranches, ordersFoundation, riders } from "@workspace/db";
 import type { DispatchAssignment } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { EventBus } from "../events/event-bus.js";
@@ -190,7 +190,7 @@ export class DispatchService {
 
   async acknowledgeDispatch(
     assignmentId: string,
-    riderId: string,
+    authUserId: string,
     accepted: boolean,
     reason?: string,
   ): Promise<{ orderId: string; idempotent?: boolean }> {
@@ -199,9 +199,18 @@ export class DispatchService {
       throw new Error(`Assignment ${assignmentId} not found`);
     }
 
-    if (assignment.riderId !== riderId) {
+    // assignment.riderId is riders.id (riders table PK).
+    // authUserId is the JWT sub (users.id / auth user PK) — a different identifier.
+    // Resolve the riders record to verify the calling user owns this assignment.
+    const [riderRow] = await this.db
+      .select({ userId: riders.userId })
+      .from(riders)
+      .where(eq(riders.id, assignment.riderId))
+      .limit(1);
+
+    if (!riderRow || riderRow.userId !== authUserId) {
       throw new Error(
-        `Assignment ${assignmentId} does not belong to rider ${riderId}`,
+        `Assignment ${assignmentId} does not belong to this rider`,
       );
     }
 
