@@ -208,6 +208,7 @@ export async function registerInternalRoutes(
   // Called by the dispatch-service to drive Phase 7 state transitions.
   // All routes are secured with DISPATCH_SERVICE_INTERNAL_KEY.
 
+  // H. Idempotent dispatch lifecycle transition helper
   async function dispatchTransition(
     request: FastifyRequest,
     reply: FastifyReply,
@@ -229,7 +230,18 @@ export async function registerInternalRoutes(
     const order = await fetchOrder(orderId, reply);
     if (!order) return;
 
-    const currentState = DB_STATUS_TO_STATE[order.status as keyof typeof DB_STATUS_TO_STATE];
+    const currentState =
+      DB_STATUS_TO_STATE[order.status as keyof typeof DB_STATUS_TO_STATE];
+
+    // F. Idempotency: already at target state → return 200
+    if (currentState === toState) {
+      return reply.status(200).send({
+        success: true,
+        data: { orderId, toState, idempotent: true },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     if (currentState !== fromState) {
       return reply.status(409).send({
         success: false,
@@ -276,7 +288,23 @@ export async function registerInternalRoutes(
       const order = await fetchOrder(orderId, reply);
       if (!order) return;
 
-      const currentState = DB_STATUS_TO_STATE[order.status as keyof typeof DB_STATUS_TO_STATE];
+      const currentState =
+        DB_STATUS_TO_STATE[order.status as keyof typeof DB_STATUS_TO_STATE];
+
+      // F. Idempotency: already RIDER_ASSIGNED → return 200
+      if (currentState === "RIDER_ASSIGNED") {
+        return reply.status(200).send({
+          success: true,
+          data: {
+            orderId,
+            riderId: body.riderId,
+            toState: "RIDER_ASSIGNED",
+            idempotent: true,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       if (currentState !== "DISPATCH_CREATED") {
         return reply.status(409).send({
           success: false,
@@ -313,6 +341,73 @@ export async function registerInternalRoutes(
       return reply.status(200).send({
         success: true,
         data: { orderId, riderId: body.riderId, toState: "RIDER_ASSIGNED" },
+        timestamp: new Date().toISOString(),
+      });
+    },
+  );
+
+  // H. Permanent dispatch failure — cancels order from DISPATCH_CREATED state
+  app.post(
+    "/internal/orders/:id/dispatch-failed",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      if (
+        !requireKey(
+          request,
+          reply,
+          dispatchInternalKey,
+          "DISPATCH_SERVICE_INTERNAL_KEY not configured",
+        )
+      )
+        return;
+
+      const { id: orderId } = request.params as { id: string };
+      const body = z
+        .object({ reason: z.string().max(500).optional() })
+        .parse(request.body ?? {});
+
+      const order = await fetchOrder(orderId, reply);
+      if (!order) return;
+
+      const currentState =
+        DB_STATUS_TO_STATE[order.status as keyof typeof DB_STATUS_TO_STATE];
+
+      // F. Idempotency: already cancelled or in terminal state
+      if (
+        currentState === "CANCELLED" ||
+        currentState === "DELIVERED" ||
+        currentState === "REFUNDED"
+      ) {
+        return reply.status(200).send({
+          success: true,
+          data: { orderId, idempotent: true },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (!currentState) {
+        return reply.status(422).send({
+          success: false,
+          error: {
+            code: "UNKNOWN_STATE",
+            message: `Order ${orderId} has an unrecognised status '${order.status}'`,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      await engine.transition({
+        orderId,
+        fromState: currentState,
+        toState: "CANCELLED",
+        actorId: undefined,
+        actorRole: "system",
+        reason:
+          body.reason ?? "Dispatch permanently failed — no rider available",
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: { orderId, toState: "CANCELLED" },
         timestamp: new Date().toISOString(),
       });
     },

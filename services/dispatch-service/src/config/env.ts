@@ -55,6 +55,12 @@ const DispatchEnvSchema = z.object({
 
   REALTIME_SERVICE_URL: z.string().url().optional(),
   REALTIME_INTERNAL_KEY: z.string().min(1).optional(),
+
+  DISPATCH_SWEEP_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(5_000)
+    .default(30_000),
 });
 
 export type DispatchEnv = z.infer<typeof DispatchEnvSchema>;

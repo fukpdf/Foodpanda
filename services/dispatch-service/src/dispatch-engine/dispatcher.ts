@@ -167,9 +167,13 @@ export class DispatchEngine {
       )
       .limit(this.config.candidateLimit * 3);
 
+    const excludeSet = new Set(request.excludeRiderIds ?? []);
     const candidates: RiderCandidate[] = [];
 
     for (const rider of allOnlineRiders) {
+      // Skip riders who already rejected/expired for this order
+      if (excludeSet.size > 0 && excludeSet.has(rider.id)) continue;
+
       if (
         rider.currentLatitude === null ||
         rider.currentLongitude === null

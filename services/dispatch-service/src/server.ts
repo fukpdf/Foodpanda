@@ -14,6 +14,7 @@ import {
   HttpRealtimeAdapter,
 } from "./events/handlers/realtime.handler.js";
 import { DispatchService } from "./services/dispatch.service.js";
+import { SweepWorker } from "./workers/sweep.worker.js";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 export async function buildServer() {
@@ -43,7 +44,12 @@ export async function buildServer() {
     origin: env.isDev ? true : env.allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID", "X-Internal-Key"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Request-ID",
+      "X-Internal-Key",
+    ],
     exposedHeaders: ["X-Request-ID"],
   });
 
@@ -82,11 +88,23 @@ export async function buildServer() {
 
   const dispatchService = new DispatchService(typedDb, eventBus, env);
 
-  await registerRoutes(
-    app,
+  // D. Start background sweep worker for expired offer detection + recovery
+  const sweepWorker = new SweepWorker(
     dispatchService,
-    env.ORDER_SERVICE_INTERNAL_KEY,
+    env.DISPATCH_SWEEP_INTERVAL_MS,
+    app.log,
   );
+
+  // Lifecycle hooks: start/stop with the server
+  app.addHook("onReady", async () => {
+    sweepWorker.start();
+  });
+
+  app.addHook("onClose", async () => {
+    sweepWorker.stop();
+  });
+
+  await registerRoutes(app, dispatchService, env.ORDER_SERVICE_INTERNAL_KEY);
 
   return app;
 }

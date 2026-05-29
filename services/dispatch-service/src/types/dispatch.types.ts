@@ -22,6 +22,7 @@ export interface DispatchRequest {
   dropoffLocation: GeoPoint;
   estimatedPrepSeconds: number;
   attemptNumber: number;
+  excludeRiderIds?: string[];
 }
 
 export interface DispatchResult {

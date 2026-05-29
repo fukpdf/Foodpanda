@@ -152,4 +152,26 @@ export class OrderServiceClient {
       );
     }
   }
+
+  async notifyDispatchFailed(
+    orderId: string,
+    reason?: string,
+  ): Promise<void> {
+    const res = await fetch(
+      `${this.orderServiceUrl}/internal/orders/${orderId}/dispatch-failed`,
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ reason }),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "(no body)");
+      throw new Error(
+        `order-service /dispatch-failed returned ${res.status}: ${text}`,
+      );
+    }
+  }
 }
