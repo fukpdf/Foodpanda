@@ -8,11 +8,7 @@ import { registerErrorHandler } from "./middleware/error-handler.js";
 import { registerRoutes } from "./routes/index.js";
 import { eventBus } from "./events/event-bus.js";
 import { registerAuditHandler } from "./events/handlers/audit.handler.js";
-import {
-  registerRealtimeHandler,
-  InMemoryRealtimeAdapter,
-  HttpRealtimeAdapter,
-} from "./events/handlers/realtime.handler.js";
+import { registerRealtimeHandler, InMemoryRealtimeAdapter, HttpRealtimeAdapter } from "./events/handlers/realtime.handler.js";
 import { OrderService } from "./services/order.service.js";
 import { OrderController } from "./controllers/order.controller.js";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -21,17 +17,10 @@ export async function buildServer() {
   const app = Fastify({
     logger: {
       level: env.LOG_LEVEL,
-      ...(env.isDev
-        ? {
-            transport: {
-              target: "pino-pretty",
-              options: { colorize: true, translateTime: "SYS:standard" },
-            },
-          }
-        : {}),
+      ...(env.isDev ? { transport: { target: "pino-pretty", options: { colorize: true, translateTime: "SYS:standard" } } } : {}),
     },
     requestIdHeader: "x-request-id",
-    trustProxy: true,
+    trustProxy: env.TRUST_PROXY === "true",
     disableRequestLogging: false,
   });
 
@@ -52,9 +41,7 @@ export async function buildServer() {
     global: true,
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_WINDOW_MS,
-    keyGenerator: (request) =>
-      (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ??
-      request.ip,
+    keyGenerator: (request) => request.ip,
     errorResponseBuilder: (_request, context) => ({
       success: false,
       error: {
@@ -66,32 +53,17 @@ export async function buildServer() {
   });
 
   registerErrorHandler(app);
-
-  // Use @workspace/db singleton — type cast to satisfy generic parameter
   const typedDb = db as NodePgDatabase<Record<string, unknown>>;
-
   registerAuditHandler(typedDb, eventBus);
 
-  const realtimeAdapter =
-    env.REALTIME_SERVICE_URL && env.REALTIME_INTERNAL_KEY
-      ? new HttpRealtimeAdapter(
-          env.REALTIME_SERVICE_URL,
-          env.REALTIME_INTERNAL_KEY,
-        )
-      : new InMemoryRealtimeAdapter();
-
+  const realtimeAdapter = env.REALTIME_SERVICE_URL && env.REALTIME_INTERNAL_KEY
+    ? new HttpRealtimeAdapter(env.REALTIME_SERVICE_URL, env.REALTIME_INTERNAL_KEY)
+    : new InMemoryRealtimeAdapter();
   registerRealtimeHandler(eventBus, realtimeAdapter);
 
   const orderService = new OrderService(typedDb, eventBus);
   const controller = new OrderController(orderService);
 
-  await registerRoutes(
-    app,
-    controller,
-    typedDb,
-    env.PAYMENT_SERVICE_INTERNAL_KEY,
-    env.DISPATCH_SERVICE_INTERNAL_KEY,
-  );
-
+  await registerRoutes(app, controller, typedDb, env.PAYMENT_SERVICE_INTERNAL_KEY, env.DISPATCH_SERVICE_INTERNAL_KEY);
   return app;
 }
