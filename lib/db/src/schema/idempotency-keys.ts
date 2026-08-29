@@ -13,19 +13,12 @@ export const idempotencyKeys = pgTable(
   "idempotency_keys",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-
     key: text("key").notNull(),
-
     resourceType: text("resource_type").notNull(),
-
     resourceId: uuid("resource_id"),
-
     responseStatus: integer("response_status"),
-
     responseBody: jsonb("response_body").$type<Record<string, unknown>>(),
-
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
