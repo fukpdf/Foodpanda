@@ -15,7 +15,7 @@ export async function registerRoutes(
   dispatchServiceInternalKey: string | undefined,
 ): Promise<void> {
   await registerHealthRoutes(app);
-  await registerOrderRoutes(app, controller);
+  await registerOrderRoutes(app, controller, db);
   await registerInternalRoutes(
     app,
     db,
