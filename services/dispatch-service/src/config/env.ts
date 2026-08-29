@@ -1,13 +1,14 @@
 import { z } from "zod";
 
 const isProduction = process.env.NODE_ENV === "production";
-const productionSecret = (minLength: number) => z.string().min(minLength).optional().refine((v) => !isProduction || Boolean(v), { message: "Required in production" });
+const productionSecret = (minLength: number) => z.string().min(minLength).optional().refine((v) => !isProduction || Boolean(v), { message: `Required in production and must be at least ${minLength} characters` });
 
 const DispatchEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3015),
   HOST: z.string().default("0.0.0.0"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
+  TRUST_PROXY: z.enum(["true", "false"]).default("false"),
   DATABASE_URL: z.string().url().refine((v) => v.startsWith("postgres"), "DATABASE_URL must use postgres protocol"),
   AUTH_PUBLIC_KEY_BASE64: z.string().optional(),
   AUTH_SERVICE_URL: z.string().url().default("http://localhost:3010"),
