@@ -6,14 +6,20 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 type Database = NodePgDatabase<Record<string, unknown>>;
 
-async function idempotentMutation(db: Database, resourceType: string, handler: (request: FastifyRequest, reply: FastifyReply) => Promise<void>, request: FastifyRequest, reply: FastifyReply): Promise<void> {
+async function idempotentMutation(
+  db: Database,
+  resourceType: string,
+  handler: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
   const key = getIdempotencyKey(request);
   if (!key) {
     await reply.status(400).send({ success: false, error: { code: "IDEMPOTENCY_KEY_REQUIRED", message: "Idempotency-Key header is required for this mutation" }, timestamp: new Date().toISOString() });
     return;
   }
 
-  const claim = await claimIdempotencyKey(db, key, resourceType);
+  const claim = await claimIdempotencyKey(db, request, resourceType, key);
   if (claim === "completed") {
     await replayIdempotentResponse(db, request, reply);
     return;
@@ -34,7 +40,7 @@ async function idempotentMutation(db: Database, resourceType: string, handler: (
 
   await handler(request, reply);
   if (responseBody !== undefined && responseStatus >= 200 && responseStatus < 300) {
-    await storeIdempotentResponse(db, key, resourceType, null, responseStatus, responseBody);
+    await storeIdempotentResponse(db, request, resourceType, null, responseStatus, responseBody);
   }
 }
 
