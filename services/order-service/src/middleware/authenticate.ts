@@ -1,13 +1,16 @@
 import { importSPKI, jwtVerify } from "jose";
 import type { FastifyRequest, FastifyReply } from "fastify";
+import { z } from "zod";
 import { env } from "../config/env.js";
 
-export interface AuthenticatedUser {
-  userId: string;
-  sessionId: string;
-  role: string;
-  email: string;
-}
+const AuthClaimsSchema = z.object({
+  sub: z.string().min(1),
+  sessionId: z.string().min(1),
+  role: z.enum(["customer", "vendor", "rider", "admin", "superadmin"]),
+  email: z.string().email(),
+});
+
+export type AuthenticatedUser = z.infer<typeof AuthClaimsSchema>;
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -23,9 +26,7 @@ async function getPublicKey(): Promise<Awaited<ReturnType<typeof importSPKI>>> {
     ? Buffer.from(env.AUTH_PUBLIC_KEY_BASE64, "base64").toString("utf8")
     : null;
 
-  if (_publicKey && _publicKeyPem && _publicKeyPem === currentPem) {
-    return _publicKey;
-  }
+  if (_publicKey && _publicKeyPem === currentPem) return _publicKey;
 
   if (currentPem) {
     _publicKeyPem = currentPem;
@@ -33,17 +34,25 @@ async function getPublicKey(): Promise<Awaited<ReturnType<typeof importSPKI>>> {
     return _publicKey;
   }
 
-  const response = await fetch(`${env.AUTH_SERVICE_URL}/auth/public-key`);
+  const response = await fetch(`${env.AUTH_SERVICE_URL}/auth/public-key`, {
+    signal: AbortSignal.timeout(5_000),
+    headers: { accept: "application/json" },
+  });
   if (!response.ok) {
-    throw new Error(
-      `[order-service] Failed to fetch public key from auth-service: ${response.status}`,
-    );
+    throw new Error(`Auth public-key request failed: ${response.status}`);
   }
 
-  const data = (await response.json()) as { publicKey: string };
+  const data = z.object({ publicKey: z.string().min(1) }).parse(await response.json());
   _publicKeyPem = data.publicKey;
-  _publicKey = await importSPKI(_publicKeyPem, "RS256");
+  _publicKey = await importSPKI(data.publicKey, "RS256");
   return _publicKey;
+}
+
+function unauthorized(reply: FastifyReply, code: string, message: string) {
+  return reply.status(401).send({
+    success: false,
+    error: { code, message, timestamp: new Date().toISOString() },
+  });
 }
 
 export async function authenticate(
@@ -51,70 +60,51 @@ export async function authenticate(
   reply: FastifyReply,
 ): Promise<void> {
   const authHeader = request.headers.authorization;
-
   if (!authHeader?.startsWith("Bearer ")) {
-    return reply.status(401).send({
-      success: false,
-      error: {
-        code: "MISSING_TOKEN",
-        message: "Authorization header with Bearer token is required",
-        timestamp: new Date().toISOString(),
-      },
-    });
+    unauthorized(reply, "MISSING_TOKEN", "Authorization header with Bearer token is required");
+    return;
   }
 
-  const token = authHeader.slice(7);
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    unauthorized(reply, "MISSING_TOKEN", "Bearer token is empty");
+    return;
+  }
 
   try {
-    const publicKey = await getPublicKey();
-    const { payload } = await jwtVerify(token, publicKey, {
+    const { payload } = await jwtVerify(token, await getPublicKey(), {
       issuer: env.JWT_ISSUER,
       audience: env.JWT_AUDIENCE,
       algorithms: ["RS256"],
     });
 
-    request.user = {
-      userId: payload["sub"] as string,
-      sessionId: payload["sessionId"] as string,
-      role: payload["role"] as string,
-      email: payload["email"] as string,
-    };
-  } catch {
-    return reply.status(401).send({
-      success: false,
-      error: {
-        code: "INVALID_TOKEN",
-        message: "Token is invalid or expired",
-        timestamp: new Date().toISOString(),
-      },
+    const claims = AuthClaimsSchema.safeParse({
+      sub: payload.sub,
+      sessionId: payload["sessionId"],
+      role: payload["role"],
+      email: payload["email"],
     });
+
+    if (!claims.success) {
+      unauthorized(reply, "INVALID_TOKEN", "Token claims are invalid");
+      return;
+    }
+    request.user = claims.data;
+  } catch {
+    unauthorized(reply, "INVALID_TOKEN", "Token is invalid or expired");
   }
 }
 
-export function requireRole(...roles: string[]) {
-  return async (
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> => {
+export function requireRole(...roles: AuthenticatedUser["role"][]) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (!request.user) {
-      return reply.status(401).send({
-        success: false,
-        error: {
-          code: "UNAUTHENTICATED",
-          message: "Authentication required",
-          timestamp: new Date().toISOString(),
-        },
-      });
+      unauthorized(reply, "UNAUTHENTICATED", "Authentication required");
+      return;
     }
-
     if (!roles.includes(request.user.role)) {
-      return reply.status(403).send({
+      reply.status(403).send({
         success: false,
-        error: {
-          code: "FORBIDDEN",
-          message: `Access denied. Required role: ${roles.join(" or ")}`,
-          timestamp: new Date().toISOString(),
-        },
+        error: { code: "FORBIDDEN", message: "You do not have permission to perform this action", timestamp: new Date().toISOString() },
       });
     }
   };
