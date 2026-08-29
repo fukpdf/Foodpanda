@@ -12,7 +12,7 @@ import type {
   OrderStateHistory,
   DispatchAssignment,
 } from "@workspace/db";
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, count, desc, eq, lt } from "drizzle-orm";
 
 import type {
   CreateOrderInput,
@@ -156,105 +156,118 @@ export class OrderRepository {
     };
   }
 
-  async findByCustomer(
+  private async findPage(
     customerId: string,
-    filters: OrderFilters = {},
+    filters: OrderFilters,
   ): Promise<PaginatedResult<OrderFoundation>> {
     const { page = 1, limit = 20, status } = filters;
     const offset = (page - 1) * limit;
-
     const conditions = [eq(ordersFoundation.customerId, customerId)];
     if (status) conditions.push(eq(ordersFoundation.status, status));
 
-    const rows = (await this.db
-      .select()
-      .from(ordersFoundation)
-      .where(and(...conditions))
-      .orderBy(desc(ordersFoundation.createdAt))
-      .limit(limit)
-      .offset(offset)) as OrderFoundation[];
-
+    const [rows, [{ total }]] = await Promise.all([
+      this.db
+        .select()
+        .from(ordersFoundation)
+        .where(and(...conditions))
+        .orderBy(desc(ordersFoundation.createdAt))
+        .limit(limit)
+        .offset(offset),
+      this.db.select({ total: count() }).from(ordersFoundation).where(and(...conditions)),
+    ]);
+    const totalCount = Number(total);
+    const totalPages = Math.ceil(totalCount / limit);
     return {
-      data: rows,
-      total: rows.length,
+      data: rows as OrderFoundation[],
+      total: totalCount,
       page,
       limit,
-      totalPages: Math.ceil(rows.length / limit),
-      hasNextPage: rows.length === limit,
+      totalPages,
+      hasNextPage: page < totalPages,
       hasPreviousPage: page > 1,
     };
   }
 
-  async findByVendorBranch(
+  private async findVendorPage(
     vendorBranchId: string,
-    filters: OrderFilters = {},
+    filters: OrderFilters,
   ): Promise<PaginatedResult<OrderFoundation>> {
     const { page = 1, limit = 20, status } = filters;
     const offset = (page - 1) * limit;
-
     const conditions = [eq(ordersFoundation.vendorBranchId, vendorBranchId)];
     if (status) conditions.push(eq(ordersFoundation.status, status));
 
-    const rows = (await this.db
-      .select()
-      .from(ordersFoundation)
-      .where(and(...conditions))
-      .orderBy(desc(ordersFoundation.createdAt))
-      .limit(limit)
-      .offset(offset)) as OrderFoundation[];
-
+    const [rows, [{ total }]] = await Promise.all([
+      this.db
+        .select()
+        .from(ordersFoundation)
+        .where(and(...conditions))
+        .orderBy(desc(ordersFoundation.createdAt))
+        .limit(limit)
+        .offset(offset),
+      this.db.select({ total: count() }).from(ordersFoundation).where(and(...conditions)),
+    ]);
+    const totalCount = Number(total);
+    const totalPages = Math.ceil(totalCount / limit);
     return {
-      data: rows,
-      total: rows.length,
+      data: rows as OrderFoundation[],
+      total: totalCount,
       page,
       limit,
-      totalPages: Math.ceil(rows.length / limit),
-      hasNextPage: rows.length === limit,
+      totalPages,
+      hasNextPage: page < totalPages,
       hasPreviousPage: page > 1,
     };
   }
 
-  async findByRider(
+  private async findRiderPage(
     riderId: string,
-    filters: OrderFilters = {},
+    filters: OrderFilters,
   ): Promise<PaginatedResult<OrderFoundation>> {
     const { page = 1, limit = 20, status } = filters;
     const offset = (page - 1) * limit;
-
     const conditions = [eq(ordersFoundation.riderId, riderId)];
     if (status) conditions.push(eq(ordersFoundation.status, status));
 
-    const rows = (await this.db
-      .select()
-      .from(ordersFoundation)
-      .where(and(...conditions))
-      .orderBy(desc(ordersFoundation.createdAt))
-      .limit(limit)
-      .offset(offset)) as OrderFoundation[];
-
+    const [rows, [{ total }]] = await Promise.all([
+      this.db
+        .select()
+        .from(ordersFoundation)
+        .where(and(...conditions))
+        .orderBy(desc(ordersFoundation.createdAt))
+        .limit(limit)
+        .offset(offset),
+      this.db.select({ total: count() }).from(ordersFoundation).where(and(...conditions)),
+    ]);
+    const totalCount = Number(total);
+    const totalPages = Math.ceil(totalCount / limit);
     return {
-      data: rows,
-      total: rows.length,
+      data: rows as OrderFoundation[],
+      total: totalCount,
       page,
       limit,
-      totalPages: Math.ceil(rows.length / limit),
-      hasNextPage: rows.length === limit,
+      totalPages,
+      hasNextPage: page < totalPages,
       hasPreviousPage: page > 1,
     };
   }
 
-  async assignRider(
-    orderId: string,
-    riderId: string,
-    estimatedDeliveryAt?: Date,
-  ): Promise<void> {
+  async findByCustomer(customerId: string, filters: OrderFilters = {}): Promise<PaginatedResult<OrderFoundation>> {
+    return this.findPage(customerId, filters);
+  }
+
+  async findByVendorBranch(vendorBranchId: string, filters: OrderFilters = {}): Promise<PaginatedResult<OrderFoundation>> {
+    return this.findVendorPage(vendorBranchId, filters);
+  }
+
+  async findByRider(riderId: string, filters: OrderFilters = {}): Promise<PaginatedResult<OrderFoundation>> {
+    return this.findRiderPage(riderId, filters);
+  }
+
+  async assignRider(orderId: string, riderId: string, estimatedDeliveryAt?: Date): Promise<void> {
     await this.db
       .update(ordersFoundation)
-      .set({
-        riderId,
-        estimatedDeliveryAt: estimatedDeliveryAt ?? null,
-        updatedAt: new Date(),
-      })
+      .set({ riderId, estimatedDeliveryAt: estimatedDeliveryAt ?? null, updatedAt: new Date() })
       .where(eq(ordersFoundation.id, orderId));
   }
 
@@ -262,12 +275,7 @@ export class OrderRepository {
     return (await this.db
       .select()
       .from(ordersFoundation)
-      .where(
-        and(
-          eq(ordersFoundation.riderId, riderId),
-          eq(ordersFoundation.status, "assigned_to_rider"),
-        ),
-      )
+      .where(and(eq(ordersFoundation.riderId, riderId), eq(ordersFoundation.status, "assigned_to_rider")))
       .limit(10)) as OrderFoundation[];
   }
 
@@ -275,11 +283,6 @@ export class OrderRepository {
     return (await this.db
       .select()
       .from(dispatchAssignments)
-      .where(
-        and(
-          eq(dispatchAssignments.status, "pending"),
-          lt(dispatchAssignments.expiresAt, new Date()),
-        ),
-      )) as DispatchAssignment[];
+      .where(and(eq(dispatchAssignments.status, "pending"), lt(dispatchAssignments.expiresAt, new Date())))) as DispatchAssignment[];
   }
 }
