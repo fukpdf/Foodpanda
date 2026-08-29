@@ -16,6 +16,7 @@ const OrderEnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3014),
   HOST: z.string().default("0.0.0.0"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
+  TRUST_PROXY: z.enum(["true", "false"]).default("false"),
 
   DATABASE_URL: z.string().url().refine((v) => v.startsWith("postgres"), "DATABASE_URL must use postgres protocol"),
 
