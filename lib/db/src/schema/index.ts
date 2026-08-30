@@ -25,4 +25,5 @@ export * from "./payment-events.js";
 export * from "./refunds.js";
 export * from "./webhook-events.js";
 export * from "./idempotency-keys.js";
+export * from "./outbox-events.js";
 export * from "./relations.js";
