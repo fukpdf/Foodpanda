@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { outboxEvents } from "@workspace/db";
 import { db, pool } from "@workspace/db";
 
@@ -9,7 +9,9 @@ const BASE_BACKOFF_MS = Number(process.env.OUTBOX_BASE_BACKOFF_MS ?? 1000);
 const WORKER_ID = process.env.HOSTNAME ?? `outbox-${process.pid}`;
 const LEASE_MS = Number(process.env.OUTBOX_LEASE_MS ?? 30_000);
 
-async function publish(event: typeof outboxEvents.$inferSelect): Promise<void> {
+type OutboxEvent = typeof outboxEvents.$inferSelect;
+
+async function publish(event: OutboxEvent): Promise<void> {
   const target = process.env.OUTBOX_PUBLISH_URL;
   if (!target) throw new Error("OUTBOX_PUBLISH_URL is required");
   const response = await fetch(target, {
@@ -26,40 +28,50 @@ function backoff(attempts: number): Date {
   return new Date(Date.now() + delay);
 }
 
-async function drain(): Promise<void> {
-  const events = await db
-    .select()
-    .from(outboxEvents)
-    .where(and(
-      lte(outboxEvents.availableAt, now),
-      isNull(outboxEvents.publishedAt),\n      or(isNull(outboxEvents.lockedAt), lte(outboxEvents.lockedAt, stale)),
-    ))
-    .orderBy(asc(outboxEvents.occurredAt))
-    .limit(BATCH_SIZE);
+async function claimEvents(): Promise<OutboxEvent[]> {
+  const stale = new Date(Date.now() - LEASE_MS);
+  const result = await db.execute(sql`
+    UPDATE ${outboxEvents}
+    SET status = 'processing', locked_at = NOW(), locked_by = ${WORKER_ID}
+    WHERE id IN (
+      SELECT id
+      FROM ${outboxEvents}
+      WHERE published_at IS NULL
+        AND available_at <= NOW()
+        AND (
+          status = 'pending'
+          OR (status = 'processing' AND locked_at <= ${stale})
+        )
+      ORDER BY occurred_at
+      LIMIT ${BATCH_SIZE}
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING *
+  `);
+  return result as unknown as OutboxEvent[];
+}
 
+async function drain(): Promise<void> {
+  const events = await claimEvents();
   for (const event of events) {
-    const claimed = await db.update(outboxEvents)
-      .set({ status: "processing", lockedAt: new Date(), lockedBy: WORKER_ID })
-      .where(and(eq(outboxEvents.id, event.id), isNull(outboxEvents.publishedAt)))
-      .returning({ id: outboxEvents.id });
-    if (!claimed.length) continue;
     try {
       await publish(event);
-      await db.update(outboxEvents)
-        .set({ publishedAt: new Date(), status: "published", lockedAt: null, lockedBy: null, lastError: null })
-        .where(eq(outboxEvents.id, event.id));
+      await db.execute(sql`
+        UPDATE ${outboxEvents}
+        SET published_at = NOW(), status = 'published', locked_at = NULL, locked_by = NULL, last_error = NULL
+        WHERE id = ${event.id} AND locked_by = ${WORKER_ID} AND published_at IS NULL
+      `);
     } catch (error) {
       const attempts = event.attempts + 1;
-      await db.update(outboxEvents)
-        .set({
-          attempts,
-          lastError: error instanceof Error ? error.message.slice(0, 2000) : "Unknown publish error",
-          availableAt: backoff(attempts),
-          status: attempts >= MAX_ATTEMPTS ? "dead_letter" : "pending",
-          lockedAt: null,
-          lockedBy: null,
-        })
-        .where(eq(outboxEvents.id, event.id));
+      const status = attempts >= MAX_ATTEMPTS ? "dead_letter" : "pending";
+      await db.execute(sql`
+        UPDATE ${outboxEvents}
+        SET attempts = ${attempts},
+            last_error = ${error instanceof Error ? error.message.slice(0, 2000) : "Unknown publish error"},
+            available_at = ${backoff(attempts)},
+            status = ${status}, locked_at = NULL, locked_by = NULL
+        WHERE id = ${event.id} AND locked_by = ${WORKER_ID} AND published_at IS NULL
+      `);
       if (attempts >= MAX_ATTEMPTS) {
         console.error(JSON.stringify({ level: "error", event: "outbox.dead-letter-threshold", eventId: event.id, attempts }));
       }
@@ -75,4 +87,5 @@ async function main(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
 }
+
 void main().catch(async (error) => { console.error(error); await pool.end(); process.exit(1); });
