@@ -40,7 +40,7 @@ async function drain(): Promise<void> {
         .where(eq(outboxEvents.id, event.id));
     } catch (error) {
       const attempts = event.attempts + 1;
-      await pool.update(outboxEvents)
+      await db.update(outboxEvents)
         .set({
           attempts,
           lastError: error instanceof Error ? error.message.slice(0, 2000) : "Unknown publish error",
