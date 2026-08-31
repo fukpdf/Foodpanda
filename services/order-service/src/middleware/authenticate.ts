@@ -29,8 +29,9 @@ async function getPublicKey(): Promise<Awaited<ReturnType<typeof importSPKI>>> {
   if (_publicKey && _publicKeyPem === currentPem) return _publicKey;
 
   if (currentPem) {
+    const importedKey = await importSPKI(currentPem, "RS256");
     _publicKeyPem = currentPem;
-    _publicKey = await importSPKI(currentPem, "RS256");
+    _publicKey = importedKey;
     return _publicKey;
   }
 
