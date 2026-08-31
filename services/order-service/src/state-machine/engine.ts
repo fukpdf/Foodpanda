@@ -3,6 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   ordersFoundation,
   orderStateHistory,
+  outboxEvents,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { TransitionContext } from "./transitions.js";
@@ -16,6 +17,10 @@ import type { EventBus } from "../events/event-bus.js";
 import type { OrderStateChangedEvent } from "../types/event.types.js";
 
 export type Database = NodePgDatabase<Record<string, unknown>>;
+
+function eventTypeForState(state: OrderState): string {
+  return `order.${state.toLowerCase()}`;
+}
 
 export interface StateMachineResult {
   orderId: string;
@@ -59,6 +64,7 @@ export class OrderStateMachine {
     }
 
     const historyId = randomUUID();
+    const eventType = eventTypeForState(ctx.toState);
 
     await this.db.transaction(async (tx) => {
       await tx
@@ -75,9 +81,27 @@ export class OrderStateMachine {
         actorRole: ctx.actorRole ?? null,
         reason: ctx.reason ?? null,
         note: ctx.note ?? null,
-        eventType: `order.${ctx.toState.toLowerCase()}`,
+        eventType,
+
         metadata: {
           transitionedAt: new Date().toISOString(),
+        },
+      });
+
+      await tx.insert(outboxEvents).values({
+        eventType,
+        aggregateType: "order",
+        aggregateId: ctx.orderId,
+        payload: {
+          orderId: ctx.orderId,
+          fromState: ctx.fromState,
+          toState: ctx.toState,
+          actorId: ctx.actorId ?? null,
+          actorRole: ctx.actorRole ?? null,
+          reason: ctx.reason ?? null,
+          note: ctx.note ?? null,
+          version: 1,
+          source: "order-service",
         },
       });
     });
