@@ -1,43 +1,43 @@
 # Phase 1 — Completion Gate
 
-Date: 2026-08-29
+Date: 2026-08-31
 
 ## Scope
 
-Phase 1 establishes and hardens the production engineering foundation. It does not claim that the complete marketplace product is implemented; customer, vendor, rider, payment, promotion, review, notification, and catalog features remain product-delivery phases.
+Phase 1 establishes and hardens the production engineering foundation. It does not claim that the complete marketplace product is implemented; catalog, customer, vendor, rider and admin product delivery remains downstream.
 
-## Completed foundation
+## Implemented in this phase
 
-- Engineering documentation source of truth under `docs/`.
-- Production architecture and domain/service boundaries documented.
-- API governance documented with OpenAPI as the public contract source.
-- Security baseline documented.
-- Project engineering guide replaced the previous placeholder guidance.
-- Order-service JWT verification validates required claims and explicitly restricts RS256, issuer, and audience.
-- Order-service production configuration requires internal service keys with minimum length.
-- Dispatch-service JWT verification now validates required claims and explicitly restricts RS256, issuer, and audience.
-- Dispatch-service public-key retrieval has bounded network timeout and validates the returned key payload.
-- Dispatch-service production configuration requires internal service keys and realtime internal secret when configured for production.
-- Internal dispatch initiation already uses constant-time comparison for the internal key.
-- Dispatch-to-order HTTP client uses the internal key and request timeouts.
-- Existing service separation, idempotent dispatch acceptance, rate limiting, Helmet, CORS controls, request IDs, and sweep-worker lifecycle have been preserved.
+- Authoritative engineering documentation under docs/.
+- Architecture, service-boundary, API, database, security, testing and product capability guidance.
+- Removal of the tracked .migration-backup source tree from the repository.
+- pnpm minimum release-age supply-chain protection retained.
+- CI runtime aligned with the repository Node 24 runtime.
+- CI now typechecks all workspaces that expose a typecheck script.
+- Order and dispatch service builds now emit dist/ so their start commands have a real build artifact.
+- Root CI now executes the repository test command.
+- Initial automated order state-machine tests cover the canonical lifecycle, terminal-state protection and cancellation rules.
+- Database package now has explicit generate/migrate commands; direct schema push is named as a development operation.
+- Order/dispatch service shutdown handlers now close Fastify and PostgreSQL resources before exit.
+- Order resource authorization now verifies customer ownership, vendor ownership of the order branch, rider ownership through the riders table, and admin bypass.
+- Vendor branch order listing now verifies vendor ownership.
+- Payment confirmation now requires and validates amount/currency against the server-side order total and no longer overwrites payment method as card.
 
-## Verification status
+## Verification
 
-Repository inspection confirms the architectural/code changes above. The GitHub connector available in this session does not expose a general-purpose shell/build runner, and this repository currently has no discoverable `.github/workflows` directory and no discoverable Vitest/Jest test configuration through repository search. Therefore a local `pnpm typecheck`, integration test suite, production deployment, and runtime smoke test cannot honestly be marked PASS from this session.
+GitHub Actions is configured for frozen dependency installation, typecheck, tests and build. The latest workflow run triggered by the payment-security change was observed in progress; its final result must be checked before marking the CI gate PASS.
 
-## Remaining release blockers
+The repository connector does not provide a general arbitrary shell runner, so a local clean install cannot be claimed from this chat. GitHub Actions is the authoritative executable verification path available here.
 
-These are intentionally NOT hidden by the Phase 1 label:
+## Remaining Phase 1 blockers
 
-1. Expand the OpenAPI contract beyond the health endpoint to cover all production-intended HTTP routes.
-2. Add automated unit/integration/contract/E2E test suites and CI quality gates.
-3. Verify internal-key enforcement on every internal route in both directions, including all payment/realtime paths.
-4. Implement durable outbox/retry semantics where cross-service state currently relies on synchronous HTTP side effects.
-5. Complete authentication/session lifecycle and RBAC against the actual auth service and user/session persistence.
-6. Complete database migration governance and run migration validation against a real PostgreSQL environment.
-7. Add production observability, alerting, backup/recovery, and deployment verification.
+1. Expand OpenAPI beyond health to cover every intended public endpoint and keep generated artifacts synchronized.
+2. Complete authentication/session lifecycle against the actual identity service and add authorization integration tests.
+3. Replace critical cross-service fire-and-forget mutations with durable outbox/retry processing.
+4. Establish real PostgreSQL migration history/baseline and validate migrations against a disposable database.
+5. Add integration/contract/E2E suites for payment, order, dispatch and authorization.
+6. Add production observability, alerting, backup/recovery and deployment verification.
 
-## Gate interpretation
+## Gate
 
-Phase 1 is **foundation-complete but release-blocked**. This distinction is deliberate: documentation and hardening are complete enough to move into domain implementation, but the platform must not be called production-ready until the verification and release blockers above are closed.
+Phase 1 must not be labeled production-ready until every remaining blocker has implementation evidence and automated verification. Foundation changes may be committed while the gate remains open.
