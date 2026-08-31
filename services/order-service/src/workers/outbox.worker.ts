@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
 import { outboxEvents } from "@workspace/db";
 import { db, pool } from "@workspace/db";
 
@@ -31,8 +31,8 @@ async function drain(): Promise<void> {
     .select()
     .from(outboxEvents)
     .where(and(
-      lte(outboxEvents.availableAt, new Date()),
-      isNull(outboxEvents.publishedAt),
+      lte(outboxEvents.availableAt, now),
+      isNull(outboxEvents.publishedAt),\n      or(isNull(outboxEvents.lockedAt), lte(outboxEvents.lockedAt, stale)),
     ))
     .orderBy(asc(outboxEvents.occurredAt))
     .limit(BATCH_SIZE);
