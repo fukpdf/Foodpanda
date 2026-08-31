@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import helmet from "helmet";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -25,7 +26,12 @@ app.use(
     },
   }),
 );
-app.use(cors());
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
+app.use(helmet());
+app.use(cors({
+  origin: allowedOrigins.length ? allowedOrigins : false,
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
