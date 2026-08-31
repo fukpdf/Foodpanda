@@ -5,7 +5,9 @@ import { db, pool } from "@workspace/db";
 const MAX_ATTEMPTS = Number(process.env.OUTBOX_MAX_ATTEMPTS ?? 8);
 const BATCH_SIZE = Number(process.env.OUTBOX_BATCH_SIZE ?? 50);
 const POLL_MS = Number(process.env.OUTBOX_POLL_INTERVAL_MS ?? 1000);
-const BASE_BACKOFF_MS = Number(process.env.OUTBOX_BASE_BACKOFF_MS ?? 1000);\nconst WORKER_ID = process.env.HOSTNAME ?? `outbox-${process.pid}`;\nconst LEASE_MS = Number(process.env.OUTBOX_LEASE_MS ?? 30_000);
+const BASE_BACKOFF_MS = Number(process.env.OUTBOX_BASE_BACKOFF_MS ?? 1000);
+const WORKER_ID = process.env.HOSTNAME ?? `outbox-${process.pid}`;
+const LEASE_MS = Number(process.env.OUTBOX_LEASE_MS ?? 30_000);
 
 async function publish(event: typeof outboxEvents.$inferSelect): Promise<void> {
   const target = process.env.OUTBOX_PUBLISH_URL;
@@ -28,11 +30,19 @@ async function drain(): Promise<void> {
   const events = await db
     .select()
     .from(outboxEvents)
-    .where(and(\n      lte(outboxEvents.availableAt, new Date()),\n      isNull(outboxEvents.publishedAt),\n    ))
+    .where(and(
+      lte(outboxEvents.availableAt, new Date()),
+      isNull(outboxEvents.publishedAt),
+    ))
     .orderBy(asc(outboxEvents.occurredAt))
     .limit(BATCH_SIZE);
 
-  for (const event of events) {\n    const claimed = await db.update(outboxEvents)\n      .set({ status: "processing", lockedAt: new Date(), lockedBy: WORKER_ID })\n      .where(and(eq(outboxEvents.id, event.id), isNull(outboxEvents.publishedAt)))\n      .returning({ id: outboxEvents.id });\n    if (!claimed.length) continue;
+  for (const event of events) {
+    const claimed = await db.update(outboxEvents)
+      .set({ status: "processing", lockedAt: new Date(), lockedBy: WORKER_ID })
+      .where(and(eq(outboxEvents.id, event.id), isNull(outboxEvents.publishedAt)))
+      .returning({ id: outboxEvents.id });
+    if (!claimed.length) continue;
     try {
       await publish(event);
       await db.update(outboxEvents)
@@ -44,7 +54,10 @@ async function drain(): Promise<void> {
         .set({
           attempts,
           lastError: error instanceof Error ? error.message.slice(0, 2000) : "Unknown publish error",
-          availableAt: backoff(attempts),\n          status: attempts >= MAX_ATTEMPTS ? "dead_letter" : "pending",\n          lockedAt: null,\n          lockedBy: null,
+          availableAt: backoff(attempts),
+          status: attempts >= MAX_ATTEMPTS ? "dead_letter" : "pending",
+          lockedAt: null,
+          lockedBy: null,
         })
         .where(eq(outboxEvents.id, event.id));
       if (attempts >= MAX_ATTEMPTS) {
