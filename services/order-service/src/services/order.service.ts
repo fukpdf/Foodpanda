@@ -321,7 +321,6 @@ export class OrderService {
       .set({
         paymentStatus: "paid",
         paymentReference,
-        paymentMethod: "card",
         updatedAt: new Date(),
       })
       .where(eq(ordersFoundation.id, orderId));

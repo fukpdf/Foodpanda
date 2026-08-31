@@ -21,8 +21,8 @@ function safeStringEqual(a: string, b: string): boolean {
 const confirmPaymentSchema = z.object({
   paymentId: z.string().uuid(),
   paymentReference: z.string().min(1),
-  amountCents: z.number().int().positive().optional(),
-  currency: z.string().length(3).optional(),
+  amountCents: z.number().int().positive(),
+  currency: z.string().length(3),
 });
 
 const failPaymentSchema = z.object({
@@ -133,6 +133,17 @@ export async function registerInternalRoutes(
         });
       }
 
+      if (body.amountCents !== order.totalCents || body.currency.toUpperCase() !== order.currency.toUpperCase()) {
+        return reply.status(409).send({
+          success: false,
+          error: {
+            code: "PAYMENT_AMOUNT_MISMATCH",
+            message: "Payment amount or currency does not match the order total",
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
       if (order.status !== "pending") {
         return reply.status(409).send({
           success: false,
@@ -159,7 +170,6 @@ export async function registerInternalRoutes(
         .set({
           paymentStatus: "paid",
           paymentReference: body.paymentReference,
-          paymentMethod: "card",
           updatedAt: new Date(),
         })
         .where(eq(ordersFoundation.id, orderId));
