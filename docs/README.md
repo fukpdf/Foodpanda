@@ -1,35 +1,21 @@
-# Food Delivery Platform — Engineering Documentation
+# Foodpanda Platform Engineering Documentation
 
-## Purpose
+This directory is the authoritative engineering documentation for the platform.
 
-This directory is the engineering source of truth for the Food Delivery Platform. It documents architecture, service boundaries, API contracts, data ownership, security, operations, testing, and product requirements.
+## Map
+- architecture.md — system boundaries and reliability
+- api-contract.md — public API contract rules
+- security.md — security baseline
+- testing.md — quality and verification
+- product-capabilities.md — product capability matrix
+- roadmap.md — phase roadmap
 
-## Documentation rules
+## Rules
+1. Cross-service architecture decisions are documented before implementation.
+2. Public APIs are represented by OpenAPI and validated at runtime.
+3. Security-sensitive behavior documents authentication, authorization and data exposure.
+4. Production capabilities require automated regression coverage.
+5. PASS means repository/build/test evidence has verified the requirement.
 
-1. Code, API contracts, database migrations, and documentation must remain consistent.
-2. Every significant architectural decision must be documented before or with its implementation.
-3. Public API behavior is contract-first: OpenAPI is the source of truth for externally consumed HTTP APIs.
-4. Production changes must be validated by typecheck, tests, build, and the applicable security/reliability checks.
-5. Secrets, credentials, tokens, private keys, and sensitive personal data must never be committed or written to logs.
-6. Destructive repository cleanup must be preceded by dependency/reference verification.
-
-## Planned documentation
-
-- `architecture/` — system architecture and ADRs
-- `api/` — API conventions and endpoint ownership
-- `database/` — schema ownership, migrations, and data lifecycle
-- `security/` — authentication, authorization, secrets, privacy, and threat model
-- `operations/` — deployment, observability, incident response, backups, and recovery
-- `testing/` — unit, integration, contract, security, and end-to-end strategy
-- `product/` — customer, vendor, rider, admin, marketplace, payment, and delivery requirements
-
-## Current baseline
-
-The repository is a pnpm TypeScript monorepo with shared libraries and dedicated order/dispatch services. Existing architecture is being hardened incrementally; incomplete scaffolding is not considered production-ready until the relevant quality gates pass.
-
-## Phase model
-
-- Phase 0 — inventory, baseline audit, risk discovery
-- Phase 1 — production architecture and engineering foundation
-- Phase 2+ — domain/product implementation and integration
-- Final release gate — security, reliability, performance, accessibility, testing, deployment, and documentation verification
+## Current truth
+The repository contains meaningful order and dispatch backend foundations, shared database/API libraries and workspace tooling. Customer, vendor, rider and admin surfaces are not yet a complete end-to-end marketplace.
