@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { ordersFoundation } from "@workspace/db";
+import { ordersFoundation, vendorBranches, vendors, riders } from "@workspace/db";
 import type { OrderFoundation } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import type { EventBus } from "../events/event-bus.js";
 import {
@@ -76,6 +76,67 @@ export class OrderService {
     this.eventBus.emit(event);
 
     return freshOrder ?? order;
+  }
+
+  async canAccessOrder(
+    orderId: string,
+    userId: string,
+    role: string,
+  ): Promise<boolean> {
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) return false;
+
+    if (role === "admin" || role === "superadmin") return true;
+    if (role === "customer") return order.customerId === userId;
+
+    if (role === "vendor") {
+      const [ownedBranch] = await this.db
+        .select({ id: vendorBranches.id })
+        .from(vendorBranches)
+        .innerJoin(vendors, eq(vendorBranches.vendorId, vendors.id))
+        .where(
+          and(
+            eq(vendorBranches.id, order.vendorBranchId),
+            eq(vendors.ownerUserId, userId),
+          ),
+        )
+        .limit(1);
+      return Boolean(ownedBranch);
+    }
+
+    if (role === "rider") {
+      if (!order.riderId) return false;
+      const [rider] = await this.db
+        .select({ id: riders.id })
+        .from(riders)
+        .where(and(eq(riders.id, order.riderId), eq(riders.userId, userId)))
+        .limit(1);
+      return Boolean(rider);
+    }
+
+    return false;
+  }
+
+  async canAccessVendorBranch(
+    branchId: string,
+    userId: string,
+    role: string,
+  ): Promise<boolean> {
+    if (role === "admin" || role === "superadmin") return true;
+    if (role !== "vendor") return false;
+
+    const [ownedBranch] = await this.db
+      .select({ id: vendorBranches.id })
+      .from(vendorBranches)
+      .innerJoin(vendors, eq(vendorBranches.vendorId, vendors.id))
+      .where(
+        and(
+          eq(vendorBranches.id, branchId),
+          eq(vendors.ownerUserId, userId),
+        ),
+      )
+      .limit(1);
+    return Boolean(ownedBranch);
   }
 
   async getOrder(orderId: string): Promise<OrderWithItems | null> {

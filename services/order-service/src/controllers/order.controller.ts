@@ -17,6 +17,27 @@ export class OrderController {
     private readonly orderService: OrderService,
   ) {}
 
+  private async ensureOrderAccess(
+    orderId: string,
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<boolean> {
+    const user = request.user!;
+    const allowed = await this.orderService.canAccessOrder(
+      orderId,
+      user.userId,
+      user.role,
+    );
+    if (!allowed) {
+      await reply.status(404).send({
+        ...fail("NOT_FOUND", "Order not found"),
+        timestamp: new Date().toISOString(),
+      });
+      return false;
+    }
+    return true;
+  }
+
   async createOrder(
     request: FastifyRequest,
     reply: FastifyReply,
@@ -46,16 +67,7 @@ export class OrderController {
       });
     }
 
-    const user = request.user!;
-    if (
-      user.role === "customer" &&
-      result.order.customerId !== user.userId
-    ) {
-      return reply.status(403).send({
-        ...fail("FORBIDDEN", "You do not have access to this order"),
-        timestamp: new Date().toISOString(),
-      });
-    }
+    if (!(await this.ensureOrderAccess(id, request, reply))) return;
 
     return reply.status(200).send({
       ...ok(result),
@@ -69,6 +81,7 @@ export class OrderController {
   ): Promise<void> {
     const { id } = request.params as { id: string };
     const user = request.user!;
+    if (!(await this.ensureOrderAccess(id, request, reply))) return;
     const body = validateBody(transitionOrderSchema, request.body);
 
     const result = await this.orderService.transitionOrder(
@@ -115,6 +128,7 @@ export class OrderController {
   ): Promise<void> {
     const { id } = request.params as { id: string };
     const user = request.user!;
+    if (!(await this.ensureOrderAccess(id, request, reply))) return;
     const body = validateBody(cancelOrderSchema, request.body);
 
     const result = await this.orderService.cancelOrder(
@@ -161,6 +175,13 @@ export class OrderController {
     reply: FastifyReply,
   ): Promise<void> {
     const { branchId } = request.params as { branchId: string };
+    const user = request.user!;
+    if (!(await this.orderService.canAccessVendorBranch(branchId, user.userId, user.role))) {
+      return reply.status(403).send({
+        ...fail("FORBIDDEN", "You do not have access to this vendor branch"),
+        timestamp: new Date().toISOString(),
+      });
+    }
     const query = validateQuery(paginationSchema, request.query);
 
     const result = await this.orderService.getOrdersByVendorBranch(branchId, {
@@ -213,6 +234,7 @@ export class OrderController {
     reply: FastifyReply,
   ): Promise<void> {
     const { id } = request.params as { id: string };
+    if (!(await this.ensureOrderAccess(id, request, reply))) return;
 
     const history = await this.orderService.getOrderHistory(id);
 
