@@ -10,7 +10,7 @@ const AuthClaimsSchema = z.object({
   email: z.string().email(),
 });
 
-export type AuthenticatedUser = z.infer<typeof AuthClaimsSchema>;
+export type AuthenticatedUser = z.infer<typeof AuthClaimsSchema> & { userId: string };
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -89,7 +89,7 @@ export async function authenticate(
       unauthorized(reply, "INVALID_TOKEN", "Token claims are invalid");
       return;
     }
-    request.user = claims.data;
+    request.user = { ...claims.data, userId: claims.data.sub };
   } catch {
     unauthorized(reply, "INVALID_TOKEN", "Token is invalid or expired");
   }
