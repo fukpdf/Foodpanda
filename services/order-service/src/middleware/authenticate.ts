@@ -43,8 +43,9 @@ async function getPublicKey(): Promise<Awaited<ReturnType<typeof importSPKI>>> {
   }
 
   const data = z.object({ publicKey: z.string().min(1) }).parse(await response.json());
+  const importedKey = await importSPKI(data.publicKey, "RS256");
   _publicKeyPem = data.publicKey;
-  _publicKey = await importSPKI(data.publicKey, "RS256");
+  _publicKey = importedKey;
   return _publicKey;
 }
 
