@@ -8,7 +8,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
-    "test": "tsx --test src/state-machine/states.test.ts src/state-machine/transitions.test.ts"
+    "test": "tsx --test src/state-machine/states.test.ts src/state-machine/transitions.test.ts",
+    "outbox:worker": "tsx src/workers/outbox.worker.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
