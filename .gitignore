@@ -47,4 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
-\n# Migration artifacts (must not be reintroduced)\n.migration-backup/\n
+
+# Migration artifacts (must not be reintroduced)
+.migration-backup/
