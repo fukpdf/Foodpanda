@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull, lte } from "drizzle-orm";
 import { outboxEvents } from "@workspace/db";
-import { pool } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 
 const MAX_ATTEMPTS = Number(process.env.OUTBOX_MAX_ATTEMPTS ?? 8);
 const BATCH_SIZE = Number(process.env.OUTBOX_BATCH_SIZE ?? 50);
@@ -25,7 +25,7 @@ function backoff(attempts: number): Date {
 }
 
 async function drain(): Promise<void> {
-  const events = await pool
+  const events = await db
     .select()
     .from(outboxEvents)
     .where(and(isNull(outboxEvents.publishedAt), lte(outboxEvents.availableAt, new Date())))
@@ -35,7 +35,7 @@ async function drain(): Promise<void> {
   for (const event of events) {
     try {
       await publish(event);
-      await pool.update(outboxEvents)
+      await db.update(outboxEvents)
         .set({ publishedAt: new Date(), lastError: null })
         .where(eq(outboxEvents.id, event.id));
     } catch (error) {
