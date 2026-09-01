@@ -23,6 +23,11 @@ export const outboxEvents = pgTable(
     availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
+    replayCount: integer("replay_count").notNull().default(0),
+    replayedAt: timestamp("replayed_at", { withTimezone: true }),
+    replayedBy: text("replayed_by"),
   },
   (t) => [
     index("outbox_events_pending_idx").on(t.status, t.availableAt, t.occurredAt),
