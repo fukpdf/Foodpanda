@@ -3,7 +3,7 @@ import type { OrderController } from "../controllers/order.controller.js";
 import { authenticate, requireRole } from "../middleware/authenticate.js";
 import { claimIdempotencyKey, getIdempotencyKey, replayIdempotentResponse, storeIdempotentResponse } from "../middleware/idempotency.js";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { auditLogs, outboxEvents } from "@workspace/db";
 
 type Database = NodePgDatabase<Record<string, unknown>>;
