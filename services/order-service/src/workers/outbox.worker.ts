@@ -69,6 +69,7 @@ async function drain(): Promise<void> {
         SET attempts = ${attempts},
             last_error = ${error instanceof Error ? error.message.slice(0, 2000) : "Unknown publish error"},
             last_attempt_at = NOW(),
+            dead_lettered_at = CASE WHEN ${status} = 'dead_letter' THEN NOW() ELSE dead_lettered_at END,
             available_at = ${backoff(attempts)},
             status = ${status}, locked_at = NULL, locked_by = NULL
         WHERE id = ${event.id} AND locked_by = ${WORKER_ID} AND published_at IS NULL
